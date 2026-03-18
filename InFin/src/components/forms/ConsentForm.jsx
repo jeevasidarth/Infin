@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 
-const ConsentForm = ({ data, updateData, onSubmit, onBack, isSubmitting, submitError, submitSuccess }) => {
+const ConsentForm = ({ data, updateData, onSubmit, onBack, isSubmitting, submitError, submitSuccess, onSuccessRedirect }) => {
 
   const canSubmit = data.consentEarnings && data.consentLocation && data.consentAutoPay && !isSubmitting;
 
@@ -19,10 +19,10 @@ const ConsentForm = ({ data, updateData, onSubmit, onBack, isSubmitting, submitE
           Your InFin profile is ready. You are now protected against sudden income disruptions.
         </p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={onSuccessRedirect ? onSuccessRedirect : () => window.location.reload()}
           className="bg-[#0066FF] hover:bg-[#0052cc] text-white font-semibold py-3 px-8 rounded-lg transition-colors"
         >
-          Go to Dashboard
+          Go to Login
         </button>
       </motion.div>
     );

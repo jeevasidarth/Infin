@@ -6,12 +6,12 @@ import PaymentForm from './forms/PaymentForm';
 import ConsentForm from './forms/ConsentForm';
 import { supabase } from '../supabase';
 
-const FormContainer = () => {
+const FormContainer = ({ onGoToLogin, onSignupSuccess }) => {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     email: '',
     whatsapp: '',
-    language: 'Hindi',
+    language: 'English',
     city: '',
     pinCode: '',
     platform: '',
@@ -19,7 +19,8 @@ const FormContainer = () => {
     upiId: '',
     consentEarnings: false,
     consentLocation: false,
-    consentAutoPay: false
+    consentAutoPay: false,
+    password: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -41,13 +42,18 @@ const FormContainer = () => {
       const { error } = await supabase
         .from('workers')
         .insert([{
-            platform_id: formData.partnerId,
-            persona: formData.platform,
-            upi_vpa: formData.upiId,
-            whatsapp_number: formData.whatsapp,
-            language_pref: formData.language,
+            phone_number: formData.whatsapp,
+            platform: formData.platform,
+            platform_partner_id: formData.partnerId,
             city: formData.city,
-            pin_code: formData.pinCode
+            pin_code: formData.pinCode,
+            preferred_language: formData.language,
+            upi_vpa: formData.upiId,
+            consent_earnings: formData.consentEarnings,
+            consent_gps: formData.consentLocation,
+            consent_autopay: formData.consentAutoPay,
+            email: formData.email,
+            password: formData.password
         }]);
 
       if (error) {
@@ -128,6 +134,7 @@ const FormContainer = () => {
                  isSubmitting={isSubmitting}
                  submitError={submitError}
                  submitSuccess={submitSuccess}
+                 onSuccessRedirect={onSignupSuccess || onGoToLogin}
                />
              )}
           </AnimatePresence>
