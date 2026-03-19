@@ -332,4 +332,11 @@ npm run dev
 
 ---
 
+### Anti-Spoofing & Fraud Detection Architecture
+GPS spoofing breaks systems that rely on a single signal. So instead of trusting location alone, we propose a multi-signal verification layer that generates a Worker Authenticity Score (WAS) using five independent signals - mobility patterns, peer comparison, network behavior, device integrity and platform activity.
+
+For example, a real worker shows gradual movement, unstable network and reduced deliveries; while a spoofed user shows teleportation, stable WiFi and no activity.
+
+Based on this score, we don’t just approve or reject, we introduce a ‘flagged’ state where suspicious claims are delayed but not denied, thereby protecting honest workers. So even if GPS is compromised, the system stays secure because behavior is much harder to fake than location
+
 *InFin — because a missed delivery day shouldn't mean a missed meal.*
