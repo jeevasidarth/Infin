@@ -373,4 +373,152 @@ For example, a real worker shows gradual movement, unstable network and reduced 
 
 Based on this score, we don’t just approve or reject, we introduce a ‘flagged’ state where suspicious claims are delayed but not denied, thereby protecting honest workers. So even if GPS is compromised, the system stays secure because behavior is much harder to fake than location
 
+## 🛡️ Adversarial Defense & Anti-Spoofing Strategy
+
+### 🎯 Problem
+
+Modern fraud groups exploit insurance platforms using GPS spoofing. They fake their location to appear inside disruption zones and trigger payouts without actually being affected. This leads to large-scale financial loss.
+
+---
+
+### 🧠 Our Approach
+
+InFin does not rely on GPS alone.
+
+Instead, we compute a **Worker Authenticity Score (WAS)** using multiple independent signals:
+
+```bash
+WAS = f(
+  mobility_pattern,
+  network_behavior,
+  device_integrity,
+  platform_activity,
+  peer_consistency
+)
+```
+
+Even if one signal is manipulated, the system remains reliable because decisions are based on combined behavioral evidence.
+
+---
+
+### ⚙️ System Flow
+
+1. External APIs detect disruption  
+2. Gate 1 (DVS) validates event authenticity  
+3. Multi-signal verification layer evaluates worker behavior  
+4. Worker Authenticity Score (WAS) is computed  
+5. Decision engine classifies the claim  
+6. Payout or audit is triggered  
+
+---
+
+### 🔍 Core Detection Layers
+
+#### Mobility Trace Engine
+- Tracks continuous GPS path instead of static location  
+- Checks speed consistency and road alignment  
+- Detects teleportation and unrealistic movement  
+
+#### Network Intelligence Engine
+- Analyzes cell tower switching patterns  
+- Measures signal strength fluctuations  
+- Detects stable WiFi usage during disruption  
+
+#### Device Integrity Engine
+- Detects mock GPS usage  
+- Identifies emulators and rooted devices  
+- Compares sensor data (movement vs location)  
+
+#### Platform Activity Engine
+- Monitors delivery activity before disruption  
+- Checks order acceptance and completion patterns  
+- Detects unnatural inactivity  
+
+#### Peer Graph Engine
+- Compares worker behavior with others in the same zone  
+- Detects coordinated patterns across multiple accounts  
+- Identifies fraud clusters  
+
+---
+
+### 🧮 Worker Authenticity Score (WAS)
+
+Each signal contributes to a final trust score.
+
+**Example weighting:**
+
+- Mobility: 25%  
+- Network: 20%  
+- Device Integrity: 20%  
+- Platform Activity: 20%  
+- Peer Consistency: 15%  
+
+---
+
+### ⚖️ Decision System
+
+Instead of binary approval, we use three outcomes:
+
+#### 🟢 Approved
+- High authenticity score  
+- Instant payout  
+
+#### 🟡 Flagged
+- Suspicious but not confirmed  
+- Payout delayed, not denied  
+- Additional verification triggered  
+
+#### 🔴 Blocked
+- Strong fraud indicators  
+- Claim rejected and sent for audit  
+
+---
+
+### 🔁 User Experience Protection
+
+Flagged claims are not rejected immediately.
+
+The system:
+- Delays payout instead of denying it  
+- Re-evaluates after more data is available  
+- Releases payment if the worker is verified  
+
+This ensures genuine workers are not penalized due to temporary network or sensor issues.
+
+---
+
+### 🔐 Additional Safeguards
+
+#### Progressive Trust Model
+- Long-term users get faster approvals  
+- New users undergo stricter validation  
+
+#### Time-Based Validation
+- Requires activity before disruption  
+- Prevents join-and-claim fraud  
+
+#### Rate Limiting
+- Detects sudden spikes in claims  
+- Activates stricter checks system-wide  
+
+---
+
+### 💡 Why This Works
+
+Fraudsters can fake GPS location.
+
+But they cannot easily fake:
+- Real movement patterns  
+- Network instability  
+- Device-level signals  
+- Delivery behavior  
+- Peer activity consistency  
+
+---
+
+### 🏁 Key Insight
+
+> InFin does not trust location.  
+> It trusts behavior across multiple independent systems.
+
 *InFin — because a missed delivery day shouldn't mean a missed meal.*
