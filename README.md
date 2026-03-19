@@ -126,6 +126,19 @@ Payout is triggered and released only once the disruption parameter that caused 
 
 ### Gate 1 — Disruption Validity Score (DVS)
 
+## Threshold-Based Validation
+
+Each disruption type has a predefined threshold stored in the system.
+
+Example:
+- Rain ≥ 35 mm → valid disruption
+- AQI ≥ 300 → hazardous condition
+- Heat Index ≥ 42°C → extreme heat
+
+The system compares real-time API values against these thresholds to determine disruption validity.
+
+disruption_valid = actual_value ≥ threshold
+
 Checks only external API data (weather, AQI, IMD alerts). Weighs:
 - **60%** — agreement across sources
 - **40%** — how far the actual reading exceeded the threshold
