@@ -4,12 +4,43 @@ import { Shield, ChevronLeft, CreditCard, AlertTriangle, ArrowRight, CheckCircle
 const PolicyPage = ({ user, onBack }) => {
   const [loading, setLoading] = useState(false);
   const [paid, setPaid] = useState(false);
+  const [quoteLoading, setQuoteLoading] = useState(true);
+  const [quoteData, setQuoteData] = useState(null);
+  const [error, setError] = useState(null);
 
-  // Mock calculations based on user's schema & formula
-  // Formula: expected_daily_earnings × disruption_probability × coverage_ratio(0.7) × 1.15 / 0.65
-  const expectedDaily = user?.expected_daily_earnings || 800; // Mock fallback
-  const probability = user?.disruption_probability || 0.05; // 5% fallback
-  const calculatedPremium = Math.round(expectedDaily * probability * 0.70 * (1.15 / 0.65));
+  React.useEffect(() => {
+    const fetchQuote = async () => {
+      try {
+        const id = user?.id || user?.worker_id;
+        console.log('[PolicyPage] Fetching quote for user_id:', id, '| full user obj:', user);
+        if (!id) throw new Error("No user ID found in session. Please log in again.");
+
+        const res = await fetch(`http://localhost:8000/api/v1/policy/quote?user_id=${id}`);
+        const data = await res.json();
+        console.log('[PolicyPage] API response:', res.status, data);
+        if (!res.ok) throw new Error(data?.detail || `API error ${res.status}`);
+        setQuoteData(data);
+      } catch (err) {
+        console.error('[PolicyPage] Quote fetch failed:', err);
+        setError(`Engine 1 error: ${err.message}`);
+        // Fallback using DB values already on the user object
+        const fallbackDaily = user?.expected_daily_earnings || 800;
+        const fallbackProb = user?.disruption_probability || 0.05;
+        setQuoteData({
+          expected_daily_earnings: fallbackDaily,
+          disruption_probability: fallbackProb,
+          weekly_premium: Math.round(fallbackDaily * fallbackProb * 0.70 * (1.15 / 0.65))
+        });
+      } finally {
+        setQuoteLoading(false);
+      }
+    };
+    fetchQuote();
+  }, [user]);
+
+  const expectedDaily = quoteData?.expected_daily_earnings || 0;
+  const probability = quoteData?.disruption_probability || 0;
+  const calculatedPremium = quoteData?.weekly_premium || 0;
   
   const handlePayment = () => {
     setLoading(true);
@@ -74,7 +105,15 @@ const PolicyPage = ({ user, onBack }) => {
               </div>
             </div>
 
-            <div className="bg-[#1A1A1A] rounded-xl p-4 border border-[#333] space-y-3">
+            <div className="bg-[#1A1A1A] rounded-xl p-4 border border-[#333] space-y-3 relative">
+              {quoteLoading && (
+                <div className="absolute inset-0 bg-[#1A1A1A]/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl">
+                  <span className="text-white text-sm font-semibold animate-pulse">Calculating via Engine 1...</span>
+                </div>
+              )}
+              {error && (
+                <div className="text-xs text-yellow-500 mb-2">{error}</div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">Expected Daily Earnings</span>
                 <span className="text-white font-medium">₹{expectedDaily}</span>
