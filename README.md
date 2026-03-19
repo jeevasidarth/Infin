@@ -46,6 +46,40 @@ InFin is a zero-paperwork income insurance platform built for Swiggy and Zomato 
 
 Each worker's weekly premium is computed individually from their verified platform earnings and their zone's historical disruption rate.
 
+## Expected Earnings Forecast (ML-Based)
+
+Instead of using a simple average, InFin predicts each worker’s expected daily earnings using a time-series forecasting model.
+
+### Why this matters
+Gig worker income is highly variable:
+- Weekends have higher demand
+- Weather disruptions reduce earnings
+- Seasonal patterns affect delivery volume
+
+Using a static average would lead to inaccurate pricing and payouts.
+
+### Model Approach
+We use a time-series model (Exponential Smoothing) trained on:
+
+- Last 4 weeks of earnings history
+- Day-of-week patterns (weekday vs weekend)
+- Delivery volume trends
+- Seasonal effects (monsoon, festivals)
+
+### Output
+expected_daily_earnings = ML predicted value for next day
+
+### Data Window
+We use a rolling 4-week window as it provides the best balance between:
+- Recency (captures current behavior)
+- Stability (reduces noise)
+
+## Data Pipeline
+
+1. Earnings data is collected per worker and stored in `earnings_history`
+2. A weekly job trains the forecasting model per worker
+3. Engine 1 uses this predicted value to compute weekly premium
+
 ```
 weekly_premium = ROUND(
   expected_daily_earnings
