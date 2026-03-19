@@ -105,32 +105,23 @@ const PolicyPage = ({ user, onBack }) => {
               </div>
             </div>
 
-            <div className="bg-[#1A1A1A] rounded-xl p-4 border border-[#333] space-y-3 relative">
+            <div className="bg-[#1A1A1A] rounded-xl p-8 border border-[#333] relative flex flex-col items-center justify-center text-center">
               {quoteLoading && (
-                <div className="absolute inset-0 bg-[#1A1A1A]/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl">
-                  <span className="text-white text-sm font-semibold animate-pulse">Calculating via Engine 1...</span>
+                <div className="absolute inset-0 bg-[#1A1A1A]/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl">
+                  <span className="text-[#0066FF] text-sm font-semibold animate-pulse flex items-center gap-2">
+                    <Shield className="w-4 h-4" /> Generating your quote...
+                  </span>
                 </div>
               )}
-              {error && (
-                <div className="text-xs text-yellow-500 mb-2">{error}</div>
-              )}
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Expected Daily Earnings</span>
-                <span className="text-white font-medium">₹{expectedDaily}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Zone Disruption Risk</span>
-                <span className="text-white font-medium">{(probability * 100).toFixed(1)}%</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Risk Factor Math</span>
-                <span className="text-white font-medium text-xs opacity-75">x 0.70 x 1.15 ÷ 0.65</span>
-              </div>
               
-              <div className="border-t border-[#333] pt-3 mt-3 flex justify-between items-center">
-                <span className="text-white font-bold">Total to Pay</span>
-                <span className="text-2xl font-black text-[#0066FF]">₹{calculatedPremium}</span>
+              <span className="text-gray-400 text-sm font-medium mb-2 uppercase tracking-wider">Your Weekly Premium</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-5xl font-black text-[#0066FF] tracking-tight">₹{calculatedPremium || 0}</span>
+                <span className="text-gray-500 font-medium">/wk</span>
               </div>
+              <p className="text-xs text-gray-500 mt-4 max-w-[85%]">
+                Coverage uniquely calculated for your typical zone routes and historical daily earnings.
+              </p>
             </div>
 
             <button 
