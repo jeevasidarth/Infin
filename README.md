@@ -20,6 +20,7 @@
 - [Tech Stack](#tech-stack)
 - [Product Screens](#product-screens)
 - [Getting Started](#getting-started)
+- [Anti-Spoofing & Fraud Detection Architecture](#Anti-Spoofing-&-Fraud-Detection-Architecture)
 
 ---
 
