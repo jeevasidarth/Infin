@@ -83,7 +83,7 @@ Gate 3 → AEC = TRUE   (Was the event covered?)
 All 3 pass → payout formula runs → UPI transfer
 ```
 
-Payout is triggered and released only once the disruption parameter that caused Gate 1 to pass returns to normal (back below threshold).
+Payout is triggered and released only once the disruption parameter that caused Gate 1 to pass returns to normal (back below threshold) and the insurance ends.
 
 ---
 
