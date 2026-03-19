@@ -1,23 +1,93 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, ChevronRight, X, ExternalLink, ShieldCheck, Clock, AlertCircle, CloudLightning, Radio, CheckCircle, MapPin } from 'lucide-react';
+import { supabase } from '../supabase';
 
 const Dashboard = ({ user, onLogout, onGoToPolicy }) => {
   const [showTerms, setShowTerms] = useState(false);
   const [showFullTerms, setShowFullTerms] = useState(false);
   const [accepted, setAccepted] = useState(false);
+  const [modalMode, setModalMode] = useState('subscribe');
 
-  // Mocking insurance status & weekly reset logic
-  const [isPolicyActive, setIsPolicyActive] = useState(user?.policyStatus === 'active' || false);
-  
-  // 0 = No Disruption, 1 = Active Disruption, 2 = Finalised
+  const [activePolicy, setActivePolicy] = useState(null);
+  const [loadingPolicy, setLoadingPolicy] = useState(true);
+  const [renewing, setRenewing] = useState(false);
+  const [renewalFeedback, setRenewalFeedback] = useState(null);
   const [disruptionStage, setDisruptionStage] = useState(0); 
+
+  useEffect(() => {
+    const fetchActivePolicy = async () => {
+      try {
+        const id = user?.id || user?.worker_id;
+        if (!id) return;
+        
+        const { data, error } = await supabase
+          .from('policies')
+          .select('*')
+          .eq('worker_id', id)
+          .eq('status', 'active')
+          .single();
+          
+        if (data && !error) {
+          setActivePolicy(data);
+        } else {
+          setActivePolicy(null);
+        }
+      } catch (err) {
+        console.error("Error fetching policy:", err);
+      } finally {
+        setLoadingPolicy(false);
+      }
+    };
+    fetchActivePolicy();
+  }, [user]);
+
+  const isPolicyActive = !!activePolicy;
   
-  // Logic for a weekly reset: mock 5 days remaining out of 7 for demonstration if active
-  const daysUntilReset = user?.daysUntilReset || 5; 
+  let daysUntilReset = 0;
+  if (isPolicyActive && activePolicy.next_due_date) {
+    const nextDue = new Date(activePolicy.next_due_date);
+    const now = new Date();
+    const diffTime = nextDue - now;
+    daysUntilReset = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  }
+  const canRenew = daysUntilReset <= 8;
+
+  const handleRenewPolicy = async () => {
+    if (!activePolicy) return;
+    setRenewing(true);
+    setRenewalFeedback(null);
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/policy/renew', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ policy_id: activePolicy.id })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.detail || "Failed to renew policy");
+      
+      setActivePolicy({
+        ...activePolicy,
+        cumulative_weeks_count: data.cumulative_weeks_count,
+        cumulative_amount_collected: data.cumulative_amount_collected,
+        next_due_date: data.next_due_date
+      });
+      setRenewalFeedback({ type: 'success', message: 'Policy renewed successfully for another week!' });
+      setTimeout(() => setRenewalFeedback(null), 5000);
+    } catch (err) {
+      console.error(err);
+      setRenewalFeedback({ type: 'error', message: err.message });
+    } finally {
+      setRenewing(false);
+    }
+  };
 
   const handleAccept = () => {
     setShowTerms(false);
-    onGoToPolicy();
+    if (modalMode === 'subscribe') {
+      onGoToPolicy();
+    } else {
+      handleRenewPolicy();
+    }
   };
 
   return (
@@ -46,13 +116,44 @@ const Dashboard = ({ user, onLogout, onGoToPolicy }) => {
             Protect your daily earnings against unexpected weather and zone disruptions. No claims to file, just peace of mind.
           </p>
 
-          {!isPolicyActive && (
+          {!isPolicyActive && !loadingPolicy && (
             <button
-              onClick={() => setShowTerms(true)}
+              onClick={() => { setModalMode('subscribe'); setAccepted(false); setShowTerms(true); }}
               className="bg-[#0066FF] hover:bg-[#0052cc] text-white font-semibold flex items-center gap-2 py-4 px-8 rounded-xl transition-all hover:scale-[1.02] shadow-lg shadow-blue-500/20 text-lg"
             >
               <Shield className="w-5 h-5" /> Get Insurance Now <ChevronRight className="w-5 h-5" />
             </button>
+          )}
+
+          {isPolicyActive && !loadingPolicy && (
+            <div className="mt-6 flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1 bg-[#1A1A1A] rounded-xl p-4 border border-[#333]">
+                  <p className="text-sm text-gray-400 mb-1">Current Streak</p>
+                  <p className="text-2xl font-bold text-[#0066FF]">{activePolicy.cumulative_weeks_count} Weeks</p>
+                </div>
+                <div className="flex-1 bg-[#1A1A1A] rounded-xl p-4 border border-[#333]">
+                  <p className="text-sm text-gray-400 mb-1">Total Saved</p>
+                  <p className="text-2xl font-bold text-green-400">₹{activePolicy.cumulative_amount_collected}</p>
+                </div>
+                <button
+                  onClick={() => { setModalMode('renew'); setAccepted(false); setShowTerms(true); }}
+                  disabled={renewing || !canRenew}
+                  className={`flex-[2] text-white font-semibold flex items-center justify-center gap-2 py-4 px-6 rounded-xl transition-all hover:scale-[1.02] text-md disabled:scale-100 ${
+                    canRenew 
+                      ? 'bg-green-600 hover:bg-green-500 shadow-lg shadow-green-500/20 disabled:opacity-50' 
+                      : 'bg-[#333] text-gray-500 cursor-not-allowed border border-[#444]'
+                  }`}
+                >
+                  {renewing ? "Processing..." : canRenew ? `Continue Policy (Pay ₹${activePolicy.policy_cost} ->)` : "Fully Covered for Next Week"}
+                </button>
+              </div>
+              {renewalFeedback && (
+                <div className={`p-4 rounded-xl text-center text-sm font-medium border animate-fade-in ${renewalFeedback.type === 'success' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-500 border-red-500/30'}`}>
+                  {renewalFeedback.message}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -301,7 +402,7 @@ const Dashboard = ({ user, onLogout, onGoToPolicy }) => {
                   : 'bg-[#333] text-gray-500 cursor-not-allowed'
                 }`}
               >
-                Accept & Continue
+                {modalMode === 'subscribe' ? 'Accept & Continue' : 'Accept & Renew'}
               </button>
             </div>
 

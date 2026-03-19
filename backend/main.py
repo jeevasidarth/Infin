@@ -92,6 +92,247 @@ async def get_policy_quote(user_id: str):
         print(f"Error calculating quote: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+class SubscribeRequest(BaseModel):
+    worker_id: str
+    policy_cost: int
+    expected_daily_earnings: int
+    disruption_probability: float
+
+
+@app.post("/api/v1/policy/subscribe")
+async def subscribe_policy(req: SubscribeRequest):
+    """
+    Called after the user confirms payment.
+    Creates a new record in the policies table to track the active insurance contract.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database connection error")
+
+    try:
+        from datetime import timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        next_due = now + timedelta(days=8)
+
+        # Check if the worker already has an active policy to avoid duplicates
+        existing = supabase.table("policies") \
+            .select("id, status") \
+            .eq("worker_id", req.worker_id) \
+            .eq("status", "active") \
+            .execute()
+
+        if existing.data:
+            raise HTTPException(
+                status_code=409,
+                detail="Worker already has an active policy. Please wait until the current policy lapses."
+            )
+
+        # Insert new policy record
+        new_policy = {
+            "worker_id": req.worker_id,
+            "policy_cost": req.policy_cost,
+            "expected_daily_earnings": req.expected_daily_earnings,
+            "disruption_probability": req.disruption_probability,
+            "coverage_start_at": now.isoformat(),
+            "next_due_date": next_due.isoformat(),
+            "status": "active",
+            "cumulative_weeks_count": 1,
+            "cumulative_amount_collected": float(req.policy_cost),
+        }
+
+        result = supabase.table("policies").insert(new_policy).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create policy record")
+
+        policy_id = result.data[0]["id"]
+        print(f"[Engine 1] Policy created: {policy_id} for worker {req.worker_id}")
+
+        return {
+            "success": True,
+            "policy_id": policy_id,
+            "status": "active",
+            "next_due_date": next_due.isoformat(),
+            "message": "Policy activated successfully"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Engine 1] Error creating policy: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+# ─────────────────────────────────────────────────────────────
+# WEEKLY RENEWAL — called when the worker pays their next week
+# Increments the cumulative aggregates on time.
+# ─────────────────────────────────────────────────────────────
+class RenewRequest(BaseModel):
+    policy_id: str
+
+
+@app.post("/api/v1/policy/renew")
+async def renew_policy(req: RenewRequest):
+    """
+    Called when the worker pays their next weekly premium on time.
+    Increments cumulative_weeks_count and cumulative_amount_collected.
+    Moves next_due_date forward by 7 days.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database connection error")
+
+    try:
+        from datetime import timezone, timedelta
+
+        # Fetch the current policy
+        res = supabase.table("policies").select("*").eq("id", req.policy_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Policy not found")
+
+        policy = res.data[0]
+
+        if policy["status"] == "lapsed":
+            raise HTTPException(
+                status_code=400,
+                detail="Policy has lapsed. Worker must subscribe again to start a new cumulative period."
+            )
+
+        now = datetime.now(timezone.utc)
+        new_weeks = policy["cumulative_weeks_count"] + 1
+        new_amount = policy["cumulative_amount_collected"] + policy["policy_cost"]
+        
+        # Add 7 days to the existing due date instead of now so early renewers don't lose days
+        try:
+            current_due = datetime.fromisoformat(str(policy["next_due_date"]).replace('Z', '+00:00'))
+        except Exception:
+            current_due = now
+        
+        new_due = current_due + timedelta(days=7)
+
+        updated = supabase.table("policies").update({
+            "cumulative_weeks_count": new_weeks,
+            "cumulative_amount_collected": new_amount,
+            "next_due_date": new_due.isoformat(),
+            "status": "active",
+        }).eq("id", req.policy_id).execute()
+
+        print(f"[Renewal] Policy {req.policy_id} renewed — week {new_weeks}, total ₹{new_amount}")
+
+        return {
+            "success": True,
+            "policy_id": req.policy_id,
+            "cumulative_weeks_count": new_weeks,
+            "cumulative_amount_collected": new_amount,
+            "next_due_date": new_due.isoformat(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Renewal] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────
+# LAPSE DETECTION — run daily via cron or admin trigger
+# Scans all active policies whose next_due_date has passed
+# and resets cumulative values to 0, marking status = lapsed.
+# ─────────────────────────────────────────────────────────────
+@app.post("/api/v1/policy/check-lapses")
+async def check_lapsed_policies():
+    """
+    Should be called by a daily scheduled job.
+    Finds all active policies past their next_due_date and lapses them,
+    resetting cumulative_weeks_count and cumulative_amount_collected to 0.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database connection error")
+
+    try:
+        from datetime import timezone
+
+        now = datetime.now(timezone.utc)
+
+        # Fetch all active policies where due date has passed
+        active_res = supabase.table("policies") \
+            .select("id, worker_id, next_due_date, cumulative_weeks_count, cumulative_amount_collected") \
+            .eq("status", "active") \
+            .lt("next_due_date", now.isoformat()) \
+            .execute()
+
+        lapsed_ids = [p["id"] for p in active_res.data]
+        lapsed_count = len(lapsed_ids)
+
+        if lapsed_count == 0:
+            return {"success": True, "lapsed_count": 0, "message": "No policies to lapse."}
+
+        # Reset cumulative fields and mark as lapsed for all overdue policies
+        for policy_id in lapsed_ids:
+            supabase.table("policies").update({
+                "status": "lapsed",
+                "cumulative_weeks_count": 0,
+                "cumulative_amount_collected": 0.0,
+            }).eq("id", policy_id).execute()
+            print(f"[Lapse] Policy {policy_id} lapsed — cumulatives reset to 0")
+
+        return {
+            "success": True,
+            "lapsed_count": lapsed_count,
+            "lapsed_policy_ids": lapsed_ids,
+        }
+
+    except Exception as e:
+        print(f"[Lapse] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────
+# CLAIM RESET — called by Engine 2 after a payout is made
+# Resets cumulative aggregates because claim payment
+# closes the current protection period.
+# ─────────────────────────────────────────────────────────────
+class ClaimResetRequest(BaseModel):
+    policy_id: str
+
+
+@app.post("/api/v1/policy/reset-on-claim")
+async def reset_policy_on_claim(req: ClaimResetRequest):
+    """
+    Called by Engine 2 after a disruption payout has been made.
+    Resets cumulative_weeks_count and cumulative_amount_collected to 0
+    and marks the policy as lapsed (claim period is now closed).
+    The worker must subscribe again to start a fresh protection period.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database connection error")
+
+    try:
+        res = supabase.table("policies").select("id, status").eq("id", req.policy_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Policy not found")
+
+        supabase.table("policies").update({
+            "status": "lapsed",
+            "cumulative_weeks_count": 0,
+            "cumulative_amount_collected": 0.0,
+        }).eq("id", req.policy_id).execute()
+
+        print(f"[ClaimReset] Policy {req.policy_id} reset after payout — cumulatives = 0")
+
+        return {
+            "success": True,
+            "policy_id": req.policy_id,
+            "message": "Policy cumulatives reset after claim payout. Policy is now lapsed."
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ClaimReset] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
