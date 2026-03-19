@@ -313,7 +313,9 @@ cd infin
 ```bash
 # Install dependencies
 npm install
+```
 
+```bash
 # Set up environment variables
 cp .env.example .env.local
 # Fill in: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
@@ -321,7 +323,9 @@ cp .env.example .env.local
 
 # Run database migrations
 npx supabase db push
+```
 
+```bash
 # Start development server
 npm run dev
 ```
