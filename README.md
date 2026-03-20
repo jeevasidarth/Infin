@@ -379,6 +379,57 @@ npm run dev
 
 ---
 
+```mermaid
+graph LR
+    %% Primary Actors on the Left
+    subgraph Primary_Actors [Primary Actor]
+        direction TB
+        Worker((Gig Worker))
+    end
+
+    %% InFin System Services in the Center Box
+    subgraph InFin_System [InFin: Income Protection System]
+        direction TB
+        UC1(Link Platform & Forecast Earnings)
+        UC2(Subscribe to Policy via UPI/Stripe)
+        UC3(Monitor Real-time Risk Dashboard)
+        UC4(Track Loyalty Bonus & Chit-fund)
+        UC5(Execute 3-Gate Claim Validation)
+        UC6(Receive Automated Payouts)
+        UC7(Get WhatsApp Notifications)
+    end
+
+    %% Secondary Actors on the Right
+    subgraph Secondary_Actors [Secondary Actors / Systems]
+        direction TB
+        Plat[Delivery Platforms<br/>Swiggy / Zomato]
+        Data[External Data<br/>Weather / IMD / AQI]
+        Pay[Financial APIs<br/>UPI / Stripe]
+        Comms[Messaging<br/>Twilio / WATI]
+    end
+
+    %% Interactions: Worker to System
+    Worker --- UC1
+    Worker --- UC2
+    Worker --- UC3
+    Worker --- UC4
+    Worker --- UC6
+    Worker --- UC7
+
+    %% Interactions: System to Secondary Actors
+    UC1 --- Plat
+    UC5 --- Data
+    UC2 --- Pay
+    UC6 --- Pay
+    UC7 --- Comms
+
+    %% Styling for a Professional Look
+    style InFin_System fill:#fdfdfd,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
+    style Primary_Actors fill:none,stroke:none
+    style Secondary_Actors fill:none,stroke:none
+    style UC5 fill:#fff4dd,stroke:#d4a017,font-weight:bold
+```
+
 ## Anti-Spoofing & Fraud Detection Architecture
 
 ### Problem & Our Approach:
