@@ -12,7 +12,7 @@ InFin uses real-time external data and behavioral analytics to detect disruption
 - [How It Works](#how-it-works)
   - [Engine 1 — Policy Pay](#engine-1--policy-pay)
   - [Engine 2 — Policy Claim](#engine-2--policy-claim)
-- [3-Gate Claim Validation](#3-gate-claim-validation)
+- [4-Gate Claim Validation](#3-gate-claim-validation)
 - [Smart Payout Logic](#smart-payout-logic)
 - [Anti-Gaming Rules](#anti-gaming-rules)
 - [Loyalty Bonus — Chit Fund Model](#loyalty-bonus--chit-fund-model)
@@ -21,7 +21,7 @@ InFin uses real-time external data and behavioral analytics to detect disruption
 - [Tech Stack](#tech-stack)
 - [Product Screens](#product-screens)
 - [Getting Started](#getting-started)
-- [Anti-Spoofing & Fraud Detection Architecture](#Anti-Spoofing-&-Fraud-Detection-Architecture)
+
 
 ---
 
