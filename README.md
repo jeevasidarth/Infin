@@ -28,7 +28,7 @@ We integrate automated event detection, data-driven validation, and instant digi
 
 ---
 
-## The Problem
+## Problem
 
 | Pain Point | Reality |
 |---|---|
