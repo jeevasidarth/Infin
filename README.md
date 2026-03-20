@@ -352,9 +352,9 @@ Total income = 100 + 230 = ₹330
 - Worker at home → ₹300  
 - Worker who tries → ₹330  
 
-✅ Effort is rewarded  
-✅ Core payout logic remains unchanged  
-✅ Simple additive incentive  
+Effort is rewarded  
+Core payout logic remains unchanged  
+Simple additive incentive  
 
 ---
 
