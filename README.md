@@ -392,8 +392,7 @@ Based on this score, we don’t just approve or reject, we introduce a ‘flagge
 
 ---
 
-
-To compute **Worker Authenticity Score (WAS)** using multiple independent signals:
+To calculate **Worker Authenticity Score (WAS)** using multiple independent signals:
 
 ```bash
 WAS = f(
