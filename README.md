@@ -1,7 +1,7 @@
 # InFin - Income Protection for India's Gig Workers
 
 ## Abstract
-InFin is a parametric, AI-driven income insurance system designed for gig economy workers. It uses real-time external data and behavioral analytics to detect disruption events and autonomously process claims without user intervention. The system employs a multi-stage validation pipeline consisting of a Disruption Validity Score (DVS), Zone Peer Comparison Score (ZPCS), and an Activation Eligibility Check (AEC) to ensure accurate and fraud-resistant claim verification. Personalized premiums are dynamically computed using machine learning models based on user earnings and regional risk. To improve trust and affordability, InFin introduces a hybrid insurance + chit-fund model, where consistent users can recover a significant portion of their premiums if no claims are made. By combining automated event detection, data-driven validation, and instant UPI payouts, InFin delivers a scalable and worker-friendly alternative to traditional insurance.
+InFin uses real-time external data and behavioral analytics to detect disruption events and autonomously process claims without user intervention. The system employs a multi-stage validation pipeline consisting of a Disruption Validity Score (DVS), Zone Peer Comparison Score (ZPCS), and an Activation Eligibility Check (AEC) to ensure accurate and fraud-resistant claim verification. Personalized premiums are dynamically computed using machine learning models based on user earnings and regional risk. To improve trust and affordability, InFin introduces a hybrid insurance + chit-fund model (If the user continuously pays for 6 months and never got refunded then in order to build trust we refund 80% - 90% of their paying), where consistent users can recover a significant portion of their premiums if no claims are made. By combining automated event detection, data-driven validation, and instant UPI payouts, InFin delivers a scalable and worker-friendly alternative to traditional insurance.
 
 ---
 
@@ -582,7 +582,7 @@ Even if one signal is manipulated, the system remains reliable because decisions
 
 Each signal contributes to a final trust score.
 
-**Example weighting:**- Mobility: 25%, Network: 20%, Device Integrity: 20%, Platform Activity: 20%, Peer Consistency: 15%  
+**Example weighting:**- Mobility: 35%, Network: 30%, Platform Activity: 20%, Peer Consistency: 15%  
 
 ### Decision System
 
