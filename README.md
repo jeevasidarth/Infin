@@ -34,7 +34,7 @@ We integrate automated event detection, data-driven validation, and instant digi
 |---|---|
 | **Who it's for** | Swiggy / Zomato delivery partners in Indian cities |
 | **Daily earnings** | ₹700 – ₹1,100/day |
-| **Risk** | Income drops to zero during floods, bandhs, heatwaves, and riots |
+| **Risk** | Income drops to zero during floods, bandhs, heatwaves and riots |
 | **Why existing insurance fails** | Expensive, tiered, one-size-fits-all, requires paperwork the worker can't afford to do |
 
 ---
