@@ -115,24 +115,88 @@ Payout is triggered and released only once the disruption parameter that caused 
 
 ### Gate 1 — Disruption Validity Score (DVS)
 
-## Threshold-Based Validation
+*Question: Did a real external disruption actually occur?*
 
-Each disruption type has a predefined threshold stored in the system.
+This gate evaluates only **external data sources** (weather APIs, AQI APIs, IMD alerts).  
+No worker data is considered at this stage.
 
-Example:
-- Rain ≥ 35 mm → valid disruption
-- AQI ≥ 300 → hazardous condition
-- Heat Index ≥ 42°C → extreme heat
+---
 
-The system compares real-time API values against these thresholds to determine disruption validity.
+## DVS Formula
 
-disruption_valid = actual_value ≥ threshold
+DVS is computed as a weighted combination of:
 
-Checks only external API data (weather, AQI, IMD alerts). Weighs:
-- **60%** — agreement across sources
-- **40%** — how far the actual reading exceeded the threshold
+DVS = (source_agreement_score × 0.60)  
+   + (threshold_breach_score × 0.40)
 
-**Pass condition:** DVS ≥ 0.70
+---
+
+## Source Agreement Score (60%)
+
+Measures how many independent data sources confirm the disruption.
+
+| Sources Confirming | Score |
+|------------------|------|
+| Both sources confirm | 1.00 |
+| Only one source confirms | 0.50 |
+| Neither confirms | 0.00 |
+| Single-source trigger (e.g., AQI via CPCB) | 1.00 if API confirms |
+
+ Rationale: Multiple independent confirmations increase confidence that the event is real.
+
+---
+
+## Threshold Breach Score (40%)
+
+Measures how strongly the observed value exceeds the predefined threshold.
+
+Each disruption type has a threshold stored in the system:
+
+- Rain ≥ 35 mm → disruption
+- AQI ≥ 300 → hazardous
+- Heat Index ≥ 42°C → extreme
+
+### Formula
+
+threshold_breach_score =  
+min(1.00, ((actual_value − threshold_value) / threshold_value) × 2)
+
+---
+
+## Example Calculations
+
+| Trigger | Threshold | Actual | Breach Score | Interpretation |
+|--------|----------|--------|--------------|---------------|
+| Rainfall | 35 mm | 37 mm | 0.114 | Borderline |
+| Rainfall | 35 mm | 52 mm | 0.971 | Strong disruption |
+| Rainfall | 35 mm | 80 mm | 1.00 | Extreme event |
+
+ Small breaches → low confidence  
+ Large breaches → high confidence  
+
+---
+
+## Final Decision
+
+**Pass condition:**
+
+DVS ≥ 0.70 → Valid disruption  
+DVS < 0.70 → Rejected (event considered weak or unconfirmed)
+
+---
+
+## Intuition
+
+- If **multiple sources agree** and **threshold is clearly exceeded** → strong signal  
+- If only one source confirms or threshold barely exceeded → weak signal  
+- Prevents false triggers from noisy or unreliable data  
+
+---
+
+## Key Insight
+
+DVS ensures that payouts are triggered **only for real, significant disruptions**,  
+not minor fluctuations or isolated API anomalies.
 
 ---
 
