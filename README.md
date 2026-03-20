@@ -180,6 +180,7 @@ A hard boolean check covering:
 
 **Pass condition:** AEC = TRUE
 
+---
 
 No action required from the worker. The system runs daily and checks for disruptions automatically.
 
