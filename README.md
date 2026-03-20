@@ -42,7 +42,7 @@ We integrate automated event detection, data-driven validation, and instant digi
 
 ## How It Works
 
-### Engine 1:- Policy Pay - Expected Earnings Forecast (ML-Based)
+## Engine 1:- Policy Pay - Expected Earnings Forecast (ML-Based)
 
 Each worker's weekly premium is computed individually from their verified platform earnings and their zone's historical disruption rate. Instead of using a simple average, we predict each worker’s expected daily earnings using a time-series forecasting model.
 
@@ -95,7 +95,7 @@ conflict_ratio = (workers paid in past 4 weeks) / (workers who claimed)
 
 ---
 
-### Engine 2:- Policy Claim - 3-Gate Claim Validation
+## Engine 2:- Policy Claim - 3-Gate Claim Validation
 
 ### Gate 1 — Disruption Validity Score (DVS)
 
@@ -105,14 +105,14 @@ This gate evaluates only **external data sources** (weather APIs, AQI APIs, IMD 
 No worker data is considered at this stage.
 
 
-## DVS Formula
+### DVS Formula
 
 DVS is computed as a weighted combination of:
 
 DVS = (source_agreement_score × 0.60)  
    + (threshold_breach_score × 0.40)
 
-## Source Agreement Score (60%)
+### Source Agreement Score (60%)
 
 Measures how many independent data sources confirm the disruption.
 
@@ -126,7 +126,7 @@ Measures how many independent data sources confirm the disruption.
  Rationale: Multiple independent confirmations increase confidence that the event is real.
 
 
-## Threshold Breach Score (40%)
+### Threshold Breach Score (40%)
 
 Measures how strongly the observed value exceeds the predefined threshold.
 
@@ -142,7 +142,7 @@ threshold_breach_score =
 min(1.00, ((actual_value − threshold_value) / threshold_value) × 2)
 ```
 
-## Example Calculations
+### Example Calculations
 
 | Trigger | Threshold | Actual | Breach Score | Interpretation |
 |--------|----------|--------|--------------|---------------|
@@ -154,7 +154,7 @@ min(1.00, ((actual_value − threshold_value) / threshold_value) × 2)
  Large breaches → high confidence  
 
 
-## Final Decision
+### Final Decision
 
 **Pass condition:**
 
