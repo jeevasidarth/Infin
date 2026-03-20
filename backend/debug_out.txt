@@ -1,0 +1,18 @@
+API Response: {"success":true,"message":"Engine 2 evaluation complete"}
+Pending Policies: [{'id': 'c2ef8bf8-d82c-4bb7-bd46-9ff204b5d010', 'status': 'pending'}, {'id': 'fce3f2b4-36a9-4fed-80b1-5a2a08b2827d', 'status': 'pending'}, {'id': 'd1316e78-b52f-4b29-a312-248aa4f9be7a', 'status': 'pending'}, {'id': '43a7558b-68ba-4a4b-8e49-531a622e286e', 'status': 'pending'}]
+Policy c2ef8bf8-d82c-4bb7-bd46-9ff204b5d010 worker pin: 600001
+Latest event for pin 600001: [{'created_at': '2026-03-21T20:00:00', 'rain': 2.69, 'flood': 0, 'aqi': 191.98, 'heat': 88.883509917887, 'lockdown': False, 'strike': False}]
+Claim for policy c2ef8bf8-d82c-4bb7-bd46-9ff204b5d010: [{'id': 'ca062b11-3ae4-4018-8bd7-c940d7057c8f', 'event_id': 'ba4e0fd4-b6ae-4b79-862c-7b288bee12c4'}]
+Original event for claim: [{'created_at': '2026-03-21T14:00:00'}]
+Policy fce3f2b4-36a9-4fed-80b1-5a2a08b2827d worker pin: 400001
+Latest event for pin 400001: [{'created_at': '2026-03-21T20:00:00', 'rain': 0.24, 'flood': 0, 'aqi': 171.86, 'heat': 90.636015332539, 'lockdown': False, 'strike': False}]
+Claim for policy fce3f2b4-36a9-4fed-80b1-5a2a08b2827d: [{'id': '9985dc7d-02a8-4cbd-880a-d03ade034892', 'event_id': 'c7ddad24-9fae-4386-90f0-706b42df8f07'}]
+Original event for claim: [{'created_at': '2026-03-21T14:00:00'}]
+Policy d1316e78-b52f-4b29-a312-248aa4f9be7a worker pin: 400001
+Latest event for pin 400001: [{'created_at': '2026-03-21T20:00:00', 'rain': 0.24, 'flood': 0, 'aqi': 171.86, 'heat': 90.636015332539, 'lockdown': False, 'strike': False}]
+Claim for policy d1316e78-b52f-4b29-a312-248aa4f9be7a: [{'id': 'd8800909-5be9-4d8e-a357-5079e386e2e0', 'event_id': 'c7ddad24-9fae-4386-90f0-706b42df8f07'}]
+Original event for claim: [{'created_at': '2026-03-21T14:00:00'}]
+Policy 43a7558b-68ba-4a4b-8e49-531a622e286e worker pin: 700001
+Latest event for pin 700001: [{'created_at': '2026-03-21T20:00:00', 'rain': 3.33, 'flood': 0, 'aqi': 165.59, 'heat': 92.7197128130661, 'lockdown': False, 'strike': False}]
+Claim for policy 43a7558b-68ba-4a4b-8e49-531a622e286e: [{'id': '9a41a459-e0c2-4f81-9e1c-eacf48bd5da9', 'event_id': '6c54248b-e9b8-435f-8bac-d58266047fb7'}]
+Original event for claim: [{'created_at': '2026-03-21T14:00:00'}]
