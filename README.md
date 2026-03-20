@@ -537,8 +537,8 @@ While the platform is designed to be fully automated — from disruption detecti
 
 Users can directly contact the InFin support team through:
 
-- Email: support@infin.app
-- Phone: +91 9XXXXXXXXX
+- Email: support@infin.com
+- Phone: 1111-4444-3333
 
 This feature is accessible within the product interface, allowing workers to quickly raise concerns related to:
 
