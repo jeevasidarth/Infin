@@ -479,10 +479,9 @@ To calculate **Worker Authenticity Score (WAS)** using multiple independent sign
 ```bash
 WAS = f(
   mobility_pattern,
+  peer_consistency,
   network_behavior,
-  device_integrity,
-  platform_activity,
-  peer_consistency
+  platform_activity
 )
 ```
 
@@ -508,20 +507,15 @@ Even if one signal is manipulated, the system remains reliable because decisions
 - Checks speed consistency and road alignment  
 - Detects teleportation and unrealistic movement
 
-#### Peer Graph Engine
+#### Peer Consistency
 - Compares worker behavior with others in the same zone  
 - Detects coordinated patterns across multiple accounts  
 - Identifies fraud clusters 
 
-#### Network Intelligence Engine
+#### Network Behaviour
 - Analyzes cell tower switching patterns  
 - Measures signal strength fluctuations  
-- Detects stable WiFi usage during disruption  
-
-#### Device Integrity Engine
-- Detects mock GPS usage  
-- Identifies emulators and rooted devices  
-- Compares sensor data (movement vs location)  
+- Detects stable WiFi usage during disruption    
 
 #### Platform Activity Engine
 - Monitors delivery activity before disruption  
@@ -534,15 +528,7 @@ Even if one signal is manipulated, the system remains reliable because decisions
 
 Each signal contributes to a final trust score.
 
-**Example weighting:**
-
-- Mobility: 25%  
-- Network: 20%  
-- Device Integrity: 20%  
-- Platform Activity: 20%  
-- Peer Consistency: 15%  
-
----
+**Example weighting:**- Mobility: 25%, Network: 20%, Device Integrity: 20%, Platform Activity: 20%, Peer Consistency: 15%  
 
 ### Decision System
 
@@ -576,22 +562,6 @@ This ensures genuine workers are not penalized due to temporary network or senso
 
 ---
 
-### Additional Safeguards
-
-#### Progressive Trust Model
-- Long-term users get faster approvals  
-- New users undergo stricter validation  
-
-#### Time-Based Validation
-- Requires activity before disruption  
-- Prevents join-and-claim fraud  
-
-#### Rate Limiting
-- Detects sudden spikes in claims  
-- Activates stricter checks system-wide  
-
----
-
 ### Why This Works
 
 Fraudsters can fake GPS location.
@@ -609,5 +579,3 @@ But they cannot easily fake:
 
 > InFin does not trust location.  
 > It trusts behavior across multiple independent systems.
-
-*InFin — because a missed delivery day shouldn't mean a missed meal.*
