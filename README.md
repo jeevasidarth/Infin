@@ -1,10 +1,7 @@
 # InFin - Income Protection for India's Gig Workers
 
 ## Abstract
-InFin is a parametric, AI-driven income insurance system designed for gig economy workers. It leverages real-time external data sources and behavioral analytics to detect disruption events and autonomously process claims without user intervention.
-
-The system employs a multi-stage validation pipeline consisting of a Disruption Validity Score (DVS), Zone Peer Comparison Score (ZPCS), and an Activation Eligibility Check (AEC) to ensure accurate and fraud-resistant claim verification. Personalized premiums (in the form of Chit-funds) are dynamically computed based on user earnings and regional risk probabilities. 
-We integrate automated event detection, data-driven validation, and instant digital payouts via UPI, InFin delivers a scalable and efficient alternative to traditional insurance models for high-volatility income environments.
+InFin is a parametric, AI-driven income insurance system designed for gig economy workers. It uses real-time external data and behavioral analytics to detect disruption events and autonomously process claims without user intervention. The system employs a multi-stage validation pipeline consisting of a Disruption Validity Score (DVS), Zone Peer Comparison Score (ZPCS), and an Activation Eligibility Check (AEC) to ensure accurate and fraud-resistant claim verification. Personalized premiums are dynamically computed using machine learning models based on user earnings and regional risk. To improve trust and affordability, InFin introduces a hybrid insurance + chit-fund model, where consistent users can recover a significant portion of their premiums if no claims are made. By combining automated event detection, data-driven validation, and instant UPI payouts, InFin delivers a scalable and worker-friendly alternative to traditional insurance.
 
 ---
 
