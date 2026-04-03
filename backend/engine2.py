@@ -192,42 +192,51 @@ async def evaluate_claims(simulated_time: Optional[str] = Query(None, descriptio
                     "status": final_claim_status,
                     "paid_at": now.isoformat() if final_claim_status == "approved" else None
                 }).eq("id", claim['id']).execute()
-                
-                # Check for advance renewal (Rollover Logic)
-                curr_policy_res = supabase.table("policies").select("*").eq("id", policy['id']).execute()
-                new_status = "lapsed"
-                new_weeks = 0
+                               # Status Reversion & Rollover Logic
+                new_status = "active" # Default back to active if rejected
+                new_weeks = 0 
                 new_amount = 0.0
                 new_due = None
                 
+                curr_policy_res = supabase.table("policies").select("*").eq("id", policy['id']).execute()
                 if curr_policy_res.data:
                     curr_policy = curr_policy_res.data[0]
-                    # If they pre-paid for >1 week, consume current week and roll over
-                    if curr_policy.get('cumulative_weeks_count', 1) > 1:
-                        new_status = "active"
-                        # If approved, the streak resets. If rejected, the streak continues.
-                        if final_claim_status == "approved":
-                            new_weeks = 1 # Streak starts over with the next week
-                        else:
-                            new_weeks = curr_policy['cumulative_weeks_count'] - 1 # Streak continues
+                    new_weeks = curr_policy.get('cumulative_weeks_count', 1)
+                    new_amount = curr_policy.get('cumulative_amount_collected', 0.0)
+                    new_due = curr_policy.get('next_due_date')
+
+                    if final_claim_status == "approved":
+                        # If they pre-paid for >1 week, consume current week and roll over
+                        if new_weeks > 1:
+                            new_status = "active"
+                            new_weeks = 1 # Streak resets upon approved payout
                             
-                        # Update collected amount to reflect the new streak
-                        weekly_cost = curr_policy.get('policy_cost', 0)
-                        new_amount = float(new_weeks * weekly_cost)
-                        
-                        # IMPORTANT: The next week starts NOW, so reset the next_due_date to 7 days from now
-                        next_due_dt = now + timedelta(days=7)
-                        new_due = next_due_dt.isoformat()
-                        print(f"[Engine 2 Phase 2] Policy {policy['id']} rolling over. New Status: {new_status}, Weeks: {new_weeks}, Next Due: {new_due}")
+                            # Adjust collected amount by removing one week's cost
+                            weekly_cost = curr_policy.get('policy_cost', 0)
+                            new_amount = float((new_weeks) * weekly_cost)
+                            
+                            # Next week starts NOW, so reset the next_due_date to 7 days from now
+                            next_due_dt = now + timedelta(days=7)
+                            new_due = next_due_dt.isoformat()
+                            print(f"[Engine 2 Phase 2] Approved Payout - Rolling over to week 1. New Due: {new_due}")
+                        else:
+                            # Last week consumed and claimed -> Lapse
+                            new_status = "lapsed"
+                            new_weeks = 0
+                            new_amount = 0.0
+                            new_due = None
+                            print(f"[Engine 2 Phase 2] Approved Payout - Final week consumed. Policy LAPSED.")
+                    else:
+                        # Rejected Claim -> Simply revert status to active to continue current term
+                        new_status = "active"
+                        print(f"[Engine 2 Phase 2] Claim Rejected - Reverting status to ACTIVE for current term.")
 
                 update_data = {
                     "status": new_status,
                     "cumulative_weeks_count": new_weeks,
-                    "cumulative_amount_collected": new_amount
+                    "cumulative_amount_collected": new_amount,
+                    "next_due_date": new_due
                 }
-                if new_due:
-                    update_data["next_due_date"] = new_due
-
                 supabase.table("policies").update(update_data).eq("id", policy['id']).execute()
                 print(f"[Engine 2 Phase 2] Successfully applied post-claim state ({new_status}) for policy {policy['id']}")
             else:
