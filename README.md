@@ -848,9 +848,9 @@ graph LR
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | React.js , VITE |
+| **Frontend** | React.js / VITE |
 | **Database** | Supabase (Postgres + Auth + Realtime) |
-| **Backend Logic** | Supabase Edge Functions |
+| **Backend Logic** | Python / Flask API |
 | **UI** | Tailwind CSS + shadcn/ui |
 | **Payments** | Razorpay (premium collection), UPI (payouts) |
 | **Notifications** | WhatsApp via Twilio / WATI |
