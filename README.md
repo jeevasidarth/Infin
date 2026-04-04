@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Built with Next.js](https://img.shields.io/badge/Built%20with-Next.js-black)](https://nextjs.org/)
 [![Powered by Supabase](https://img.shields.io/badge/Powered%20by-Supabase-3ECF8E)](https://supabase.com/)
-[![IRDAI Sandbox](https://img.shields.io/badge/Regulated-IRDAI%20Sandbox-orange)](https://www.irdai.gov.in/)
+[![IRDAI Aligned](https://img.shields.io/badge/Designed%20in%20alignment%20with-IRDAI%20Sandbox-orange)](https://www.irdai.gov.in/)
 
 ---
 
@@ -162,7 +162,7 @@ EDE               = ₹872
 disruption_prob   = 0.0615
 conflict_ratio    = 0.70
 k                 = 0.005
-midpoint          = ₹50 (applied to raw_premium space)
+midpoint          = ₹50 (applied to raw_premium space — not EDE)
 
 raw_premium = ROUND(872 × 0.0615 × 0.70 × 1.15 / 0.65)
             = ₹58
@@ -277,6 +277,8 @@ ZPCS = (workers_with_≥40%_activity_drop) / (total_active_workers_in_zone)
 
 **Pass condition:** `ZPCS ≥ 0.35` (≥ 35% of zone peers show ≥ 40% delivery drop)
 
+> **Threshold Justification:** The 0.35 threshold was selected to balance two failure modes: setting it too high causes false negatives (legitimate claims from moderate disruptions get rejected); setting it too low causes false positives (fraudulent claims pass in partially-affected zones). During pilot, this will be tuned using observed disruption-activity correlation data. Until then, 35% represents a conservative but worker-fair baseline.
+
 > **Key distinction from Gate 4:** ZPCS validates the *event* — it doesn't look at individual behaviour. Gate 4 validates the *individual worker*.
 
 ---
@@ -360,6 +362,16 @@ Builds baseline profiles from historical delivery data: order acceptance rate, c
 | Cell tower fingerprint | ❌ Phone is physically elsewhere |
 | Peer ward distribution | ❌ Requires knowing all other workers' data |
 | Platform order logs | ❌ Controlled by Swiggy/Zomato, not the worker |
+
+**WAS Score Decision Boundaries:**
+
+| WAS Score | Label | Action |
+|---|---|---|
+| ≥ 0.75 | 🟢 Approved | Instant payout triggered |
+| 0.50 – 0.74 | 🟡 Flagged | Payout delayed, re-evaluated with additional signals |
+| < 0.50 | 🔴 Blocked | Claim sent to human audit queue, no payout |
+
+> Score boundaries calibrated to minimise both false positives (blocking genuine workers) and false negatives (approving fraudulent claims). To be refined using pilot cohort data.
 
 ---
 
@@ -498,6 +510,74 @@ Settlement is triggered automatically and paid via UPI.
 
 ---
 
+## Data Integration Strategy
+
+InFin acknowledges that platform earnings data (Swiggy/Zomato order logs, worker earnings) is not publicly available via open APIs. The following graduated integration strategy is planned:
+
+| Phase | Approach |
+|---|---|
+| **Pilot Phase** | Worker self-uploads (screenshots, PDFs) of weekly earnings summaries from partner apps |
+| **Growth Phase** | Formal data-sharing agreements with gig platforms (precedent: NBFC partnerships with Ola/Uber) |
+| **Scale Phase** | Real-time API integration via platform partner programme |
+
+**Proxy signals if direct APIs are unavailable:**
+- IMD / OpenWeatherMap for disruption detection (already public)
+- CPCB AQI API (public)
+- Cell tower activity density (via telecom partner MoU)
+- Worker-declared earnings cross-validated against zone peer activity
+
+> Absence of direct platform API access delays accuracy — it does not block the system. The gate architecture is designed to function on proxy signals until richer data becomes available.
+
+---
+
+## Risk Pool Model
+
+Premiums collected from active workers are pooled at the zone level to fund automated payouts.
+
+| Pool Mechanism | Details |
+|---|---|
+| **Collection** | Weekly premiums pooled in a zone-segregated escrow |
+| **Diversification** | Risk spread across workers in different wards within each city zone |
+| **Reserve Buffer** | 15% of each premium retained as a contingency reserve (the 1.15 loading factor in the formula) |
+| **Reinsurance** | Reinsurance layer planned at scale to protect against catastrophic multi-city events (e.g., national floods) |
+| **Return Flow** | Undrawn reserves after 24-week chit cycle returned to eligible workers as Loyalty Bonus |
+
+---
+
+## Edge Cases & System Failures
+
+InFin is designed to degrade gracefully, not catastrophically:
+
+| Scenario | System Behaviour |
+|---|---|
+| **Low worker density in a ward** | ZPCS falls back to city-level peer comparison when fewer than 10 workers are active in the ward |
+| **Weather API failure or timeout** | DVS evaluation deferred — event is not rejected; claim held in `pending` state until API recovers |
+| **Worker has no earnings history** | EMA falls back to city-median earnings for the platform; clearly disclosed in premium breakdown |
+| **Multiple simultaneous disruptions** | Each active event evaluated independently; highest-impact event used for payout calculation |
+| **UPI payout failure** | Auto-retry 3× over 24 hours; worker notified via WhatsApp; manual intervention triggered at third failure |
+| **Fraudster with long history** | Ward Affinity uses minimum 14-day window — requires consistent historical presence before any coverage |
+
+---
+
+## Unit Economics (Pilot Estimates)
+
+Based on a cohort of gig delivery workers in Chennai and Bengaluru:
+
+| Metric | Estimate |
+|---|---|
+| Average weekly premium | ₹55 – ₹65 |
+| Average claim probability per week | ~6% |
+| Expected payout per approved claim | ₹250 – ₹350 |
+| Expected claims per 100 worker-weeks | ~6 events |
+| Expected payout cost per 100 worker-weeks | ~₹1,800 |
+| Expected premium income per 100 worker-weeks | ~₹6,000 |
+| Expected gross margin | ~70% (before reinsurance and operations) |
+| Effective cost to worker per protected ₹ of income | ₹0.07 – ₹0.10 |
+
+> *These estimates are based on IMD historical disruption frequency data for major delivery cities and published gig worker earnings reports. Actual figures will be refined during pilot.*
+
+---
+
 ## Security Architecture
 
 ### 1. Data Security
@@ -523,8 +603,8 @@ Settlement is triggered automatically and paid via UPI.
 ### 2. Financial Security
 
 **Premium Collection**
-- Stripe processes all payment data — InFin never handles raw card credentials
-- PCI-DSS compliance inherited from Stripe
+- Razorpay processes all payment data — InFin never handles raw card credentials
+- PCI-DSS compliance inherited from Razorpay
 - Weekly auto-debit with explicit worker consent at onboarding
 
 **Payout Security**
@@ -581,7 +661,7 @@ Settlement is triggered automatically and paid via UPI.
 
 ### 7. Regulatory Compliance
 
-- Operating under IRDAI Regulatory Sandbox Framework (Ref. IRDAI/HLT/REG/CIR/0025/2019)
+- Designed in alignment with IRDAI Regulatory Sandbox Framework (Ref. IRDAI/HLT/REG/CIR/0025/2019)
 - Weekly premium model aligned with IRDAI microinsurance guidelines
 - Data handling compliant with DPDP Act 2023
 - Standard exclusions (war, pandemic, terrorism, nuclear events) documented in the formal policy wording
@@ -749,7 +829,7 @@ graph LR
 
     subgraph InFin_System [InFin: Income Protection System]
         UC1(Link Platform & Forecast Earnings)
-        UC2(Subscribe to Policy via UPI/Stripe)
+        UC2(Subscribe to Policy via UPI/Razorpay)
         UC3(Monitor Real-time Risk Dashboard)
         UC4(Track Loyalty Bonus & Chit-fund)
         UC5(Execute 4-Gate Claim Validation)
@@ -760,7 +840,7 @@ graph LR
     subgraph Secondary_Actors [Secondary Actors / Systems]
         Plat[Delivery Platforms\nSwiggy / Zomato]
         Data[External Data\nWeather / IMD / AQI]
-        Pay[Financial APIs\nUPI / Stripe]
+        Pay[Financial APIs\nUPI / Razorpay]
         Comms[Messaging\nTwilio / WATI]
     end
 
@@ -793,7 +873,7 @@ graph LR
 | **Database** | Supabase (Postgres + Auth + Realtime) |
 | **Backend Logic** | Supabase Edge Functions |
 | **UI** | Tailwind CSS + shadcn/ui |
-| **Payments** | Stripe (premium collection), UPI (payouts) |
+| **Payments** | Razorpay (premium collection), UPI (payouts) |
 | **Notifications** | WhatsApp via Twilio / WATI |
 | **Weather & AQI** | OpenWeatherMap / CPCB AQI APIs |
 | **Flood Prediction** | Custom ML model (zone + date level) |
@@ -861,9 +941,9 @@ npm install
 # Set up environment variables
 cp .env.example .env.local
 # Fill in:
-#   NEXT_PUBLIC_SUPABASE_URL
-#   SUPABASE_SERVICE_ROLE_KEY
-#   STRIPE_SECRET_KEY
+#   VITE_RAZORPAY_KEY_ID
+#   RAZORPAY_KEY_ID
+#   RAZORPAY_KEY_SECRET
 #   TWILIO_ACCOUNT_SID
 #   TWILIO_AUTH_TOKEN
 
@@ -877,4 +957,4 @@ npm run dev
 ---
 
 *InFin — Protecting the income of India's gig workers.*
-*Policy Form INFIN-IPP-2026-01 | Regulated under IRDAI Sandbox Framework*
+*Policy Form INFIN-IPP-2026-01 | Designed in alignment with IRDAI Sandbox Framework*
