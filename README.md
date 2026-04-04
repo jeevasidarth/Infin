@@ -844,9 +844,9 @@ graph LR
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | Next.js (App Router) |
+| **Frontend** | React.js / VITE |
 | **Database** | Supabase (Postgres + Auth + Realtime) |
-| **Backend Logic** | Supabase Edge Functions |
+| **Backend Logic** | Python / Flash API |
 | **UI** | Tailwind CSS + shadcn/ui |
 | **Payments** | Razorpay (premium collection), UPI (payouts) |
 | **Notifications** | WhatsApp via Twilio / WATI |
@@ -857,7 +857,7 @@ graph LR
 | **Fraud Detection** | Custom WAS ensemble model |
 | **Premium Model** | Exponential Smoothing + Sigmoid scaling |
 
----
+NOTE: For the prototype purpose only, some of the API's are not being used - instead synthetic data is used
 
 ## Product Screens
 
