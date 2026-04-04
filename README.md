@@ -848,7 +848,7 @@ graph LR
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | Next.js (App Router) |
+| **Frontend** | React.js , VITE |
 | **Database** | Supabase (Postgres + Auth + Realtime) |
 | **Backend Logic** | Supabase Edge Functions |
 | **UI** | Tailwind CSS + shadcn/ui |
@@ -861,8 +861,7 @@ graph LR
 | **Fraud Detection** | Custom WAS ensemble model |
 | **Premium Model** | Exponential Smoothing + Sigmoid scaling |
 
-Note: For the prototype some of the API's are not being used, instead synthetic data is put to usage.
----
+Note: For the prototype purpose only, some of the API's are not being used - instead synthetic data is put to usage.
 
 ## Product Screens
 
