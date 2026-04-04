@@ -861,6 +861,7 @@ graph LR
 | **Fraud Detection** | Custom WAS ensemble model |
 | **Premium Model** | Exponential Smoothing + Sigmoid scaling |
 
+Note: For the prototype some of the API's are not being used, instead synthetic data is put to usage.
 ---
 
 ## Product Screens
