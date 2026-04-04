@@ -3,11 +3,6 @@
 > **Parametric income insurance for Swiggy & Zomato delivery partners.**
 > Automated payouts. Zero paperwork. No manual claims.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Built with Next.js](https://img.shields.io/badge/Built%20with-Next.js-black)](https://nextjs.org/)
-[![Powered by Supabase](https://img.shields.io/badge/Powered%20by-Supabase-3ECF8E)](https://supabase.com/)
-[![IRDAI Aligned](https://img.shields.io/badge/Designed%20in%20alignment%20with-IRDAI%20Sandbox-orange)](https://www.irdai.gov.in/)
-
 ---
 
 ## Table of Contents
@@ -37,11 +32,23 @@
 
 ## Abstract
 
-InFin uses real-time external data and behavioural analytics to detect disruption events and autonomously process claims without user intervention. The system employs a multi-stage validation pipeline — **Disruption Validity Score (DVS)**, **Zone Peer Comparison Score (ZPCS)**, **Activation Eligibility Check (AEC)**, and **Worker Authenticity Score (WAS)** — to ensure accurate, fraud-resistant claim verification.
+InFin is a parametric income protection ecosystem designed for India’s gig economy, providing an automated safety net for delivery partners against hyper-local disruptions like floods, heatwaves, and strikes. To ensure long-term sustainability and worker trust, InFin operates on a Hybrid Insurance-Chit Fund Model: workers who maintain a 24-week claim-free streak recover up to most of their premiums, turning protection into a low-risk savings habit.
 
-Personalised premiums are dynamically computed using a **sigmoid-scaled ML model** based on predicted earnings and regional risk. To improve trust and affordability, InFin introduces a **hybrid insurance + chit-fund model**, where consistent users recover a significant portion of their premiums if no claims are made.
+The system is powered by two proprietary engines:
 
-By combining automated event detection, data-driven validation, and instant UPI payouts, InFin delivers a scalable, worker-friendly alternative to traditional insurance.
+Engine 1 (Policy Pay): Uses a time-series ML model to forecast earnings, applying a Sigmoid-scaled premium formula that dynamically adjusts risk while strictly capping weekly costs at ₹100 to ensure affordability for low-income earners.
+
+Engine 2 (Policy Claim): A 4-Gate validation pipeline that has evolved from broad city-level monitoring to hyper-local Ward-Based Analysis.
+
+### Core Innovations
+- Ward Affinity & Compensation Logic: The system identifies a worker's "Prime Ward" through historical data. If a disruption occurs, InFin calculates if the worker could have reasonably compensated for lost earnings by moving to an adjacent, unaffected "Best Ward." Payouts are triggered only when regional disruption makes such compensation impossible.
+
+- Gate 4: Anti-Spoofing via Cell Tower Triangulation: To combat GPS spoofing, InFin introduces a hardware-level validation layer. The system pulls Cell Tower IDs and signal strength via the Android API, performs an OpenCellID lookup, and cross-checks this physical network location against the user’s claimed Ward coordinates.
+
+- Smart Payouts & Anti-Gaming: Includes a Smart Payout Logic that guarantees an income floor and Anti-Gaming Rules (e.g., 6-hour refractory periods) to prevent "on-demand" policy purchases during active disasters.
+
+  ![WhatsApp Image 2026-04-04 at 22 01 43](https://github.com/user-attachments/assets/c90ea50c-d6bc-4221-8eb5-72fab305077c)
+
 
 ---
 
@@ -839,9 +846,9 @@ graph LR
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | Next.js (App Router) |
+| **Frontend** | React.js / VITE |
 | **Database** | Supabase (Postgres + Auth + Realtime) |
-| **Backend Logic** | Supabase Edge Functions |
+| **Backend Logic** | Python / Flask API |
 | **UI** | Tailwind CSS + shadcn/ui |
 | **Payments** | Razorpay (premium collection), UPI (payouts) |
 | **Notifications** | WhatsApp via Twilio / WATI |
@@ -852,7 +859,7 @@ graph LR
 | **Fraud Detection** | Custom WAS ensemble model |
 | **Premium Model** | Exponential Smoothing + Sigmoid scaling |
 
----
+Note: For the prototype purpose only, some of the API's are not being used - instead synthetic data is put to usage.
 
 ## Product Screens
 
