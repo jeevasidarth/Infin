@@ -138,11 +138,19 @@ async def evaluate_claims(simulated_time: Optional[str] = Query(None, descriptio
                 else:
                     remaining_affinity += aff
                     
-            gate1_passed = False
-            if len(disrupted_wards) > 0:
-                print(f"[Engine 2] Worker {worker_id} disrupted. Disrupted Aff: {combined_disrupted_affinity}, Remaining Aff: {remaining_affinity}")
-                if combined_disrupted_affinity >= remaining_affinity:
-                    gate1_passed = True
+                MANAGABLE_INCOME_THRESHOLD = 0.60 # If user can still earn 60% in other wards, they can manage.
+                
+                # 'remaining_affinity' is the sum of affinities for non-disrupted wards
+                if combined_disrupted_affinity > 0:
+                    # User is only disrupted if their REMAINING income capacity is low
+                    if remaining_affinity >= MANAGABLE_INCOME_THRESHOLD:
+                        print(f"[Engine 2 Gate 1] Worker {worker_id} filtered out. Can manage with {remaining_affinity:.2%} remaining capacity.")
+                        gate1_passed = False
+                    else:
+                        print(f"[Engine 2 Gate 1] Worker {worker_id} disrupted. Remaining capacity {remaining_affinity:.2%} is below threshold.")
+                        gate1_passed = True
+                else:
+                    gate1_passed = False
             
             if gate1_passed:
                 # Check if claim already exists
@@ -173,11 +181,11 @@ async def evaluate_claims(simulated_time: Optional[str] = Query(None, descriptio
                     zpcs_passed = avg_peer_working_pct <= ZPCS_THRESHOLD
                     print(f"[Engine 2 Gate 2] Worker {worker_id} — weighted_avg_working={avg_peer_working_pct:.2%}, ZPCS={'PASS (Disruption was severe enough)' if zpcs_passed else 'FAIL (Most peers worked anyway)'}")
                 else:
-                    # No peer data for today — default fail to be safe
-                    avg_peer_working_pct = 1.0 # Simulate 100% working as a "default reject" or 0 as "default pass"?
-                    # User's sentence implies we Reject if > 50%. If no data, we ignore.
-                    zpcs_passed = False 
-                    print(f"[Engine 2 Gate 2] No peer_activity data for today for worker {worker_id}. ZPCS defaulted to FAIL.")
+                    # No peer data for today — allow to pass to be worker-friendly
+                    # Usually means the system hasn't populated data yet, so we don't punish the worker
+                    avg_peer_working_pct = 0.0 
+                    zpcs_passed = True 
+                    print(f"[Engine 2 Gate 2] No peer_activity data for today for worker {worker_id}. ZPCS defaulted to PASS.")
 
                 # --- GATE 3: AEC — Anti-Exploitation Check ---
                 # Policy must have started BEFORE the earliest disruption event in this claim
@@ -204,15 +212,17 @@ async def evaluate_claims(simulated_time: Optional[str] = Query(None, descriptio
                     "policy_id": policy['id'],
                     "disruption_event_ids": disruption_event_ids,
                     "gate1_passed": True,
+                    "dvs_passed": True,
                     "gate1_disrupted_affinity": combined_disrupted_affinity,
                     "gate1_remaining_affinity": remaining_affinity,
                     "zpcs_passed": zpcs_passed,
                     "gate2_avg_peer_working_pct": avg_peer_working_pct if total_weight > 0 else 0.0,
                     "aec_passed": aec_passed,
-                    "expected_daily": expected_daily,
-                    "floor_amount": floor_amount,
+                    "expected_daily": int(expected_daily),
+                    "floor_amount": int(floor_amount),
                     "actual_earned": 0,
                     "final_payout": 0,
+                    "weekly_cap_remaining": int(expected_daily * 7),
                     "status": claim_status
                 }
                 supabase.table("claims").insert(new_claim).execute()
@@ -296,15 +306,14 @@ async def evaluate_claims(simulated_time: Optional[str] = Query(None, descriptio
                 # Phase-3 uses 75% limit on the new Phase-4 expected earnings calculation
                 if actual_earned >= (GATE5_PERCENTAGE_THRESHOLD * expected_period_earnings):
                     final_claim_status = "rejected"
-                    print(f"  -> GATE 5 REJECTED: Worker earned {actual_earned} which is >= {GATE5_PERCENTAGE_THRESHOLD*100}% of expected {expected_period_earnings:.2f}")
+                    print(f"  -> GATE 5 REJECTED: Worker earned {actual_earned:.2f} which is >= {GATE5_PERCENTAGE_THRESHOLD*100}% of expected {expected_period_earnings:.2f}")
                 else:
                     final_claim_status = "approved"
+                    # Payout is inversely proportional to earnings: reward effort but cover the gap.
                     gap = expected_period_earnings - actual_earned
-                    # Phase-3 floor-amount protection equation
-                    final_payout = max(int(gap), int(floor_amount))
-                    if final_payout < 0:
-                        final_payout = 0
-                    print(f"  -> GATE 5 APPROVED: Worker earned {actual_earned}. Gap: {gap}. Final Payout (with floor {floor_amount}): {final_payout}")
+                    # Ensure payout is non-negative and capped at expected
+                    final_payout = max(0, int(gap))
+                    print(f"  -> GATE 5 APPROVED: Worker earned {actual_earned:.2f}. Expected: {expected_period_earnings:.2f}. Gap Payout: {final_payout}")
                 
                 supabase.table("claims").update({
                     "actual_earned": actual_earned,
@@ -312,6 +321,17 @@ async def evaluate_claims(simulated_time: Optional[str] = Query(None, descriptio
                     "status": final_claim_status,
                     "paid_at": now.isoformat() if final_claim_status == "approved" else None
                 }).eq("id", claim['id']).execute()
+
+                # --- NEW: Automated Payout Recording ---
+                if final_claim_status == "approved":
+                    supabase.table("payments").insert({
+                        "policy_id": policy['id'],
+                        "amount": -int(final_payout), # Negative to indicate outflow
+                        "status": "success",
+                        "transaction_ref": f"payout_claim_{claim['id'][:8]}",
+                        "paid_at": now.isoformat()
+                    }).execute()
+                    print(f"  -> PAYOUT RECORDED: Rs.-{final_payout} in payments table.")
                 
                 # 5. Update Policy State
                 if final_claim_status == "approved":

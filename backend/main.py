@@ -50,6 +50,9 @@ async def get_policy_quote(user_id: str):
         raise HTTPException(status_code=500, detail="Database connection error")
         
     try:
+        from datetime import timezone, timedelta
+        now = datetime.now(timezone.utc)
+
         # 1. Fetch worker
         worker_res = supabase.table("workers").select("*").eq("id", user_id).execute()
         worker = worker_res.data[0] if worker_res.data else None
@@ -60,49 +63,112 @@ async def get_policy_quote(user_id: str):
         city = worker.get("city")
         print(f"[Engine 1] Worker city from DB: '{city}'")
         
-        # 2. Fetch DP value for the city — use ilike for case-insensitive matching
-        dp_res = supabase.table("dp_table").select("dp_value").ilike("city", city).execute()
-        print(f"[Engine 1] DP table result: {dp_res.data}")
-        disruption_probability = dp_res.data[0]['dp_value'] if dp_res.data else 0.05
+        # 2. Disruption Probability
+        # Calculate the weighted average of DP for the wards the user is a part of
+        affinity_res = supabase.table("worker_ward_affinity").select("ward_id, affinity_score").eq("worker_id", user_id).execute()
+        disruption_probability = 0.05 # default fallback
         
-        # 3. Fetch earnings history. Since it's hourly cumulative now, fetch enough rows and get max per day
-        # Supabase API limits might apply, but 300 should cover ~12 days of hourly pinging
-        earnings_res = supabase.table("earnings_history").select("date", "ts", "earnings").eq("worker_id", user_id).order("date", desc=True).limit(300).execute()
+        if affinity_res.data:
+            total_dp = 0.0
+            total_affinity = 0.0
+            for aff in affinity_res.data:
+                w_id = aff['ward_id']
+                score = float(aff['affinity_score'])
+                dp_res = supabase.table("dp_table").select("dp_value").eq("ward_id", w_id).order("date", desc=True).limit(1).execute()
+                if dp_res.data and dp_res.data[0].get('dp_value') is not None:
+                    total_dp += float(dp_res.data[0]['dp_value']) * score
+                    total_affinity += score
+            if total_affinity > 0:
+                disruption_probability = total_dp / total_affinity
+        else:
+            # New user fallback: average DP of all wards in their city
+            wards_res = supabase.table("wards").select("id").ilike("city", f"%{city}%").execute()
+            if wards_res.data:
+                w_ids = [w['id'] for w in wards_res.data]
+                if w_ids:
+                    dp_res = supabase.table("dp_table").select("dp_value").in_("ward_id", w_ids).execute()
+                    if dp_res.data:
+                        vals = [float(row['dp_value']) for row in dp_res.data if row.get('dp_value') is not None]
+                        if vals:
+                            disruption_probability = sum(vals) / len(vals)
         
-        expected_daily_earnings = 800 # fallback
+        print(f"[Engine 1] Calculated DP: {disruption_probability}")
+
+        # 3. Dynamic Conflict Ratio
+        # Ratio of claims processed vs active policies in the last 30 days
+        thirty_days_ago = now - timedelta(days=30)
+        active_policies_count_res = supabase.table("policies").select("id", count="exact").execute()
+        active_count = active_policies_count_res.count if active_policies_count_res.count is not None else 1
         
-        if earnings_res.data:
-            # PURE PYTHON: Group by date and find max earnings per day
-            daily_max = {}
-            for row in earnings_res.data:
-                d = row.get('date')
-                try:
-                    val = float(row.get('earnings', 0))
-                except (ValueError, TypeError):
-                    val = 0
-                if d:
-                    if d not in daily_max or val > daily_max[d]:
-                        daily_max[d] = val
+        claims_count_res = supabase.table("claims").select("id", count="exact").eq("status", "approved").execute()
+        claims_count = claims_count_res.count if claims_count_res.count is not None else 0
+        
+        conflict_ratio = 0.70 # Default stable ratio
+        if active_count > 0:
+            raw_ratio = min(2.0, (claims_count / active_count) * 10) # Scaled for premium weighting
+            conflict_ratio = (0.7 * conflict_ratio) + (0.3 * raw_ratio)
             
-            # Sort chronologically for EMA
-            sorted_dates = sorted(daily_max.keys())
-            daily_values = [daily_max[d] for d in sorted_dates]
+        # 4. Fetch enrollment age to handle New Users (< 7 days)
+        try:
+            created_at_dt = datetime.fromisoformat(worker.get("created_at").replace('Z', '+00:00'))
+            if not created_at_dt.tzinfo:
+                created_at_dt = created_at_dt.replace(tzinfo=timezone.utc)
+            enrollment_days = (now - created_at_dt).days
+        except Exception:
+            enrollment_days = 0 # Default to new if parse fails
             
-            if daily_values:
-                # Simple EMA (span=7)
-                alpha = 2 / (7 + 1)
-                ema = daily_values[0]
-                for val in daily_values[1:]:
-                    ema = (val * alpha) + (ema * (1 - alpha))
-                expected_daily_earnings = ema
+        is_new_user = enrollment_days < 7
+
+        # 5. Determine Expected Daily Earnings (EDE)
+        expected_daily_earnings = 800 # Fallback default
+        
+        if is_new_user:
+            # NEW USER LOGIC: Use City Average Earnings from other workers' active policies
+            city_workers_res = supabase.table("workers").select("id").eq("city", city).neq("id", user_id).execute()
+            city_worker_ids = [w['id'] for w in city_workers_res.data] if city_workers_res.data else []
+            
+            if city_worker_ids:
+                p_res = supabase.table("policies").select("expected_daily_earnings").in_("worker_id", city_worker_ids).eq("status", "active").execute()
+                valid_earnings = [int(p['expected_daily_earnings']) for p in p_res.data if p.get('expected_daily_earnings') is not None]
+                if valid_earnings:
+                    expected_daily_earnings = sum(valid_earnings) / len(valid_earnings)
+            print(f"[Engine 1] New User (<7 days). Using city average from policies: {expected_daily_earnings}")
+        else:
+            # EXISTING USER: Fetch individual trip data from worker_orders
+            orders_res = supabase.table("worker_orders").select("earning, created_at").eq("worker_id", user_id).gte("created_at", thirty_days_ago.isoformat()).execute()
+            
+            if orders_res.data:
+                # Daily Aggregation (Sum of earnings per day)
+                daily_sums = {}
+                for row in orders_res.data:
+                    dt_str = row.get('created_at').split('T')[0]
+                    earning = float(row.get('earning', 0))
+                    daily_sums[dt_str] = daily_sums.get(dt_str, 0) + earning
                 
-        # 4. Engine 1 Formula Calculate Premium
-        weekly_premium = round(expected_daily_earnings * disruption_probability * 0.70 * 1.15 / 0.65)
+                # Sort dates chronologically for EMA
+                sorted_dates = sorted(daily_sums.keys())
+                daily_values = [daily_sums[d] for d in sorted_dates]
+                
+                if len(daily_values) >= 1:
+                    # ML Model: Exponential Smoothing (Alpha 0.25)
+                    alpha = 0.25
+                    ema = daily_values[0]
+                    for val in daily_values[1:]:
+                        ema = (val * alpha) + (ema * (1 - alpha))
+                    expected_daily_earnings = ema
+                    print(f"[Engine 1] EMA calculated for worker {user_id} over {len(daily_values)} days: {expected_daily_earnings}")
+                
+        # 6. Engine 1 Formula: Calculate Weekly Premium
+        weekly_premium = round(expected_daily_earnings * disruption_probability * conflict_ratio * 1.15 / 0.65)
         
+        if weekly_premium > 100:
+            weekly_premium = 100
+            
         return {
             "worker_id": user_id,
             "expected_daily_earnings": round(expected_daily_earnings),
             "disruption_probability": disruption_probability,
+            "conflict_ratio": round(conflict_ratio, 2),
             "weekly_premium": weekly_premium
         }
         
@@ -166,6 +232,17 @@ async def subscribe_policy(req: SubscribeRequest):
 
         policy_id = result.data[0]["id"]
         print(f"[Engine 1] Policy created: {policy_id} for worker {req.worker_id}")
+
+        # Record the successful payment
+        new_payment = {
+            "policy_id": policy_id,
+            "amount": req.policy_cost,
+            "status": "success",
+            "transaction_ref": f"sub_{int(now.timestamp())}",
+            "paid_at": now.isoformat()
+        }
+        supabase.table("payments").insert(new_payment).execute()
+        print(f"[Engine 1] Payment recorded for policy {policy_id}")
 
         return {
             "success": True,
@@ -259,6 +336,16 @@ async def renew_policy(req: RenewRequest):
             "status": "active",
         }).eq("id", req.policy_id).execute()
 
+        # Record the successful renewal payment
+        new_payment = {
+            "policy_id": req.policy_id,
+            "amount": policy["policy_cost"],
+            "status": "success",
+            "transaction_ref": f"rnw_{int(now.timestamp())}",
+            "paid_at": now.isoformat()
+        }
+        supabase.table("payments").insert(new_payment).execute()
+
         print(f"[Renewal] Policy {req.policy_id} renewed — week {new_weeks}, total ₹{new_amount}")
 
         return {
@@ -292,37 +379,95 @@ async def check_lapsed_policies():
         raise HTTPException(status_code=500, detail="Database connection error")
 
     try:
-        from datetime import timezone
+        from datetime import timezone, timedelta
 
         now = datetime.now(timezone.utc)
 
-        # Fetch all active policies where due date has passed
+        # 48-HOUR GRACE PERIOD: only lapse policies where due date passed > 2 days ago
+        grace_deadline = (now - timedelta(hours=48)).isoformat()
+
+        # Fetch all active policies past their grace deadline
         active_res = supabase.table("policies") \
             .select("id, worker_id, next_due_date, cumulative_weeks_count, cumulative_amount_collected") \
             .eq("status", "active") \
-            .lt("next_due_date", now.isoformat()) \
+            .lt("next_due_date", grace_deadline) \
             .execute()
 
         lapsed_ids = [p["id"] for p in active_res.data]
         lapsed_count = len(lapsed_ids)
 
         if lapsed_count == 0:
-            return {"success": True, "lapsed_count": 0, "message": "No policies to lapse."}
+            return {"success": True, "lapsed_count": 0, "message": "No policies to lapse (within grace period)."}
 
-        # Reset cumulative fields and mark as lapsed for all overdue policies
-        for policy_id in lapsed_ids:
+        LOYALTY_STREAK_WEEKS = 24  # Full chit fund cycle = 6 months
+        settlements_triggered = 0
+
+        for policy in active_res.data:
+            policy_id = policy["id"]
+            weeks = policy["cumulative_weeks_count"]
+            amount = float(policy["cumulative_amount_collected"])
+
+            # 24-WEEK CHIT FUND LOGIC
+            if weeks >= LOYALTY_STREAK_WEEKS:
+                # Worker completed the unbroken 24-week streak — trigger settlement
+                claims_res = supabase.table("claims") \
+                    .select("id", count="exact") \
+                    .eq("policy_id", policy_id) \
+                    .eq("status", "approved") \
+                    .execute()
+                claim_count = claims_res.count if claims_res.count is not None else 0
+
+                # Return % based on claim history:
+                #   0 claims  -> 80-90% (85%)
+                #   1 claim   -> 15%
+                #   2+ claims -> 10%  (minimum)
+                if claim_count == 0:
+                    return_pct = 0.85
+                elif claim_count == 1:
+                    return_pct = 0.15
+                else:
+                    return_pct = 0.10
+
+                return_amount = int(amount * return_pct)
+
+                supabase.table("loyalty_settlements").insert({
+                    "policy_id": policy_id,
+                    "total_premiums_paid": int(amount),
+                    "claim_count": claim_count,
+                    "return_percentage": return_pct,
+                    "return_amount": return_amount,
+                    "settled_at": now.isoformat()
+                }).execute()
+
+                # --- NEW: Automated Bonus Payout Recording ---
+                supabase.table("payments").insert({
+                    "policy_id": policy_id,
+                    "amount": -int(return_amount), # Negative to indicate outflow
+                    "status": "success",
+                    "transaction_ref": f"payout_bonus_{policy_id[:8]}",
+                    "paid_at": now.isoformat()
+                }).execute()
+
+                settlements_triggered += 1
+                print(f"[Lapse] LOYALTY BONUS: Policy {policy_id} | 24-week streak | Claims={claim_count} | Return={return_pct*100:.0f}% | Payout=Rs.{return_amount}")
+            else:
+                # Streak broken — missed a weekly payment, no bonus
+                print(f"[Lapse] STREAK BROKEN: Policy {policy_id} lapsed at week {weeks}/24 — no loyalty bonus")
+
+            # In both cases, lapse and reset streak
             supabase.table("policies").update({
                 "status": "lapsed",
                 "cumulative_weeks_count": 0,
                 "cumulative_amount_collected": 0.0,
             }).eq("id", policy_id).execute()
-            print(f"[Lapse] Policy {policy_id} lapsed — cumulatives reset to 0")
 
         return {
             "success": True,
             "lapsed_count": lapsed_count,
-            "lapsed_policy_ids": lapsed_ids,
+            "settlements_triggered": settlements_triggered,
+            "message": f"{lapsed_count} policies lapsed, {settlements_triggered} loyalty settlements triggered."
         }
+
 
     except Exception as e:
         print(f"[Lapse] Error: {e}")

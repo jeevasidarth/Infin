@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-gunicorn
-pydantic
-python-dotenv
-supabase==2.7.0
-httpx
-razorpay

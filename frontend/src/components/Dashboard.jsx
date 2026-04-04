@@ -11,10 +11,12 @@ const Dashboard = ({ user, onLogout, onGoToPolicy, triggerRazorpay }) => {
 
   const [activePolicy, setActivePolicy] = useState(null);
   const [allClaims, setAllClaims] = useState([]);
+  const [loyaltySettlements, setLoyaltySettlements] = useState([]);
   const [loadingPolicy, setLoadingPolicy] = useState(true);
   const [renewing, setRenewing] = useState(false);
   const [renewalFeedback, setRenewalFeedback] = useState(null);
   const [disruptionStage, setDisruptionStage] = useState(0); 
+  const [newPayoutAlert, setNewPayoutAlert] = useState(null); // { id, type, amount }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -36,10 +38,12 @@ const Dashboard = ({ user, onLogout, onGoToPolicy, triggerRazorpay }) => {
           setActivePolicy(null);
         }
 
-        // Fetch All Claims
+        // Fetch All Policies (to get all related claims and settlements)
         const pols = await supabase.from('policies').select('id').eq('worker_id', id);
         if (pols.data && pols.data.length > 0) {
            const p_ids = pols.data.map(p => p.id);
+           
+           // Fetch Claims
            const {data: claimsData, error: claimsErr} = await supabase
              .from('claims')
              .select('*')
@@ -48,6 +52,31 @@ const Dashboard = ({ user, onLogout, onGoToPolicy, triggerRazorpay }) => {
              
            if (claimsData && !claimsErr) {
              setAllClaims(claimsData);
+           }
+
+           // Fetch Loyalty Settlements
+           const {data: settlementsData, error: settlementsErr} = await supabase
+             .from('loyalty_settlements')
+             .select('*')
+             .in('policy_id', p_ids)
+             .order('settled_at', {ascending: false});
+
+           if (settlementsData && !settlementsErr) {
+              setLoyaltySettlements(settlementsData);
+           }
+
+           // Check for New (Unseen) Payouts
+           const seenIds = JSON.parse(localStorage.getItem(`seen_payouts_${id}`) || '[]');
+           
+           // Recent approved claim?
+           const newClaim = claimsData?.find(c => c.status === 'approved' && !seenIds.includes(c.id));
+           // Recent loyalty bonus?
+           const newBonus = settlementsData?.find(s => !seenIds.includes(s.id));
+
+           if (newBonus) {
+              setNewPayoutAlert({ id: newBonus.id, type: 'bonus', amount: newBonus.return_amount });
+           } else if (newClaim) {
+              setNewPayoutAlert({ id: newClaim.id, type: 'claim', amount: newClaim.final_payout });
            }
         }
       } catch (err) {
@@ -58,6 +87,23 @@ const Dashboard = ({ user, onLogout, onGoToPolicy, triggerRazorpay }) => {
     };
     fetchData();
   }, [user]);
+
+  const dismissPayoutAlert = () => {
+    if (!newPayoutAlert) return;
+    const id = user?.id || user?.worker_id;
+    const seenIds = JSON.parse(localStorage.getItem(`seen_payouts_${id}`) || '[]');
+    if (!seenIds.includes(newPayoutAlert.id)) {
+        seenIds.push(newPayoutAlert.id);
+        localStorage.setItem(`seen_payouts_${id}`, JSON.stringify(seenIds));
+    }
+    setNewPayoutAlert(null);
+  };
+
+  // Merge claims and settlements for history
+  const combinedHistory = [
+    ...allClaims.map(c => ({ ...c, type: 'claim', date: c.created_at })),
+    ...loyaltySettlements.map(s => ({ ...s, type: 'bonus', date: s.settled_at }))
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const isPolicyActive = !!activePolicy;
   
@@ -131,37 +177,63 @@ const Dashboard = ({ user, onLogout, onGoToPolicy, triggerRazorpay }) => {
       </div>
 
       {/* Notifications Area */}
-      {allClaims.length > 0 && (
-         <div className="max-w-4xl mx-auto mb-6">
-           {allClaims[0].status === 'pending' && (
-             <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-xl p-4 flex items-start gap-4 animate-pulse">
-               <AlertCircle className="text-yellow-500 w-6 h-6 flex-shrink-0 mt-1"/>
-               <div>
-                 <h3 className="text-yellow-500 font-bold mb-1 border-b border-yellow-500/20 pb-1">Severe Weather Disruption Detected</h3>
-                 <p className="text-gray-300 text-sm">Your policy is currently tracking an ongoing disruption actively affecting your zone. No action is required from your side. We will evaluate your earnings and process any legitimate claims once the weather normalizes.</p>
-               </div>
+      <div className="max-w-4xl mx-auto mb-6 space-y-4">
+        {/* New Payout Alert (One-time) */}
+        {newPayoutAlert && (
+           <div className="bg-green-500/20 border-2 border-green-500 rounded-xl p-6 flex flex-col md:flex-row items-center gap-6 shadow-2xl shadow-green-500/10 animate-fade-in">
+             <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center shrink-0">
+               <ShieldCheck className="text-white w-10 h-10"/>
              </div>
-           )}
-           {allClaims[0].status === 'approved' && (
-             <div className="bg-green-500/20 border border-green-500/50 rounded-xl p-4 flex items-start gap-4">
-               <CheckCircle className="text-green-500 w-6 h-6 flex-shrink-0 mt-1"/>
-               <div>
-                 <h3 className="text-green-500 font-bold mb-1 border-b border-green-500/20 pb-1">Claim Approved & Paid!</h3>
-                 <p className="text-gray-300 text-sm">The recent extreme weather completely disrupted your operations. We have automatically credited a payout of <strong className="text-white text-base">₹{allClaims[0].final_payout}</strong> to your account. Stay safe out there!</p>
-               </div>
+             <div className="flex-1 text-center md:text-left">
+               <h3 className="text-2xl font-black text-white mb-1">
+                 {newPayoutAlert.type === 'bonus' ? '🎊 Loyalty Bonus Received!' : '✅ Insurance Claim Paid!'}
+               </h3>
+               <p className="text-green-300/80">
+                 A payout of <strong className="text-white text-xl">₹{newPayoutAlert.amount}</strong> has been successfully credited to your linked UPI.
+               </p>
              </div>
-           )}
-           {allClaims[0].status === 'rejected' && (
-             <div className="bg-gray-700/50 border border-gray-600 rounded-xl p-4 flex items-start gap-4">
-               <Shield className="text-gray-400 w-6 h-6 flex-shrink-0 mt-1"/>
-               <div>
-                 <h3 className="text-gray-300 font-bold mb-1 border-b border-gray-600 pb-1">Claim Evaluated: No Payout Required</h3>
-                 <p className="text-gray-400 text-sm">A recent weather disruption was evaluated, but your completed deliveries indicate your earnings did not drop below the critical 50% threshold. Excellent job pushing through the bad weather!</p>
-               </div>
+             <button 
+               onClick={dismissPayoutAlert}
+               className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg font-bold transition-all"
+             >
+               Dismiss
+             </button>
+           </div>
+        )}
+
+        {loyaltySettlements.length > 0 && !newPayoutAlert && new Date(loyaltySettlements[0].settled_at) > new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) && (
+           <div className="bg-[#0066FF]/20 border border-[#0066FF]/50 rounded-xl p-4 flex items-start gap-4">
+             <ShieldCheck className="text-[#0066FF] w-6 h-6 flex-shrink-0 mt-1"/>
+             <div>
+               <h3 className="text-[#0066FF] font-bold mb-1 border-b border-[#0066FF]/20 pb-1">Chit Fund Cycle Complete!</h3>
+               <p className="text-gray-300 text-sm">Congratulations! You've maintained an unbroken 24-week streak. We have returned <strong className="text-white text-base">₹{loyaltySettlements[0].return_amount}</strong> ({loyaltySettlements[0].return_percentage * 100}%) to your account as a loyalty bonus. Your new streak starts from zero!</p>
              </div>
-           )}
-         </div>
-      )}
+           </div>
+        )}
+
+        {allClaims.length > 0 && (
+          <>
+            {allClaims[0].status === 'pending' && (
+              <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-xl p-4 flex items-start gap-4 animate-pulse">
+                <AlertCircle className="text-yellow-500 w-6 h-6 flex-shrink-0 mt-1"/>
+                <div>
+                  <h3 className="text-yellow-500 font-bold mb-1 border-b border-yellow-500/20 pb-1">Severe Weather Disruption Detected</h3>
+                  <p className="text-gray-300 text-sm">Your policy is currently tracking an ongoing disruption actively affecting your zone. No action is required from your side. We will evaluate your earnings and process any legitimate claims once the weather normalizes.</p>
+                </div>
+              </div>
+            )}
+            {allClaims[0].status === 'approved' && (
+              <div className="bg-green-500/20 border border-green-500/50 rounded-xl p-4 flex items-start gap-4">
+                <CheckCircle className="text-green-500 w-6 h-6 flex-shrink-0 mt-1"/>
+                <div>
+                  <h3 className="text-green-500 font-bold mb-1 border-b border-green-500/20 pb-1">Claim Approved & Paid!</h3>
+                  <p className="text-gray-300 text-sm">The recent extreme weather completely disrupted your operations. We have automatically credited a payout of <strong className="text-white text-base">₹{allClaims[0].final_payout}</strong> to your account. Stay safe out there!</p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Main Content Area */}
       <div className="max-w-4xl mx-auto space-y-6">
@@ -186,27 +258,59 @@ const Dashboard = ({ user, onLogout, onGoToPolicy, triggerRazorpay }) => {
 
           {isPolicyActive && !loadingPolicy && (
             <div className="mt-6 flex flex-col gap-4">
+              {/* Loyalty Bonus Progress */}
+              {(() => {
+                const STREAK_TARGET = 24;
+                const weeks = activePolicy.cumulative_weeks_count || 0;
+                const amount = activePolicy.cumulative_amount_collected || 0;
+                const progress = Math.min((weeks / STREAK_TARGET) * 100, 100);
+                const weeksLeft = Math.max(0, STREAK_TARGET - weeks);
+                const estimatedReturn = Math.round(amount * 0.85);
+                const isComplete = weeks >= STREAK_TARGET;
+                return (
+                  <div className="bg-[#1A1A1A] rounded-xl p-4 border border-[#333]">
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="text-sm text-gray-400">Chit Fund Streak</p>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isComplete ? 'bg-green-500/20 text-green-400' : 'bg-[#0066FF]/10 text-[#0066FF]'}`}>
+                        {isComplete ? '🎉 Eligible for Bonus!' : `${weeksLeft} weeks to go`}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-1 mb-3">
+                      <span className="text-2xl font-bold text-white">{weeks}</span>
+                      <span className="text-gray-500 text-sm">/ {STREAK_TARGET} weeks</span>
+                    </div>
+                    <div className="w-full bg-[#2B2B2B] rounded-full h-2 mb-3 overflow-hidden">
+                      <div
+                        className={`h-2 rounded-full transition-all duration-700 ${isComplete ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-[#0066FF] to-blue-400'}`}
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Total invested: <span className="text-white font-medium">₹{amount}</span></span>
+                      <span>Est. return (no claims): <span className="text-green-400 font-medium">₹{estimatedReturn}</span></span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1 bg-[#1A1A1A] rounded-xl p-4 border border-[#333]">
-                  <p className="text-sm text-gray-400 mb-1">Current Streak</p>
-                  <p className="text-2xl font-bold text-[#0066FF]">{activePolicy.cumulative_weeks_count} Weeks</p>
-                </div>
-                <div className="flex-1 bg-[#1A1A1A] rounded-xl p-4 border border-[#333]">
-                  <p className="text-sm text-gray-400 mb-1">Total Saved</p>
-                  <p className="text-2xl font-bold text-green-400">₹{activePolicy.cumulative_amount_collected}</p>
+                  <p className="text-sm text-gray-400 mb-1">Weekly Premium</p>
+                  <p className="text-2xl font-bold text-[#0066FF]">₹{activePolicy.policy_cost}</p>
                 </div>
                 <button
                   onClick={() => { setModalMode('renew'); setAccepted(false); setShowTerms(true); }}
                   disabled={renewing || !canRenew}
                   className={`flex-[2] text-white font-semibold flex items-center justify-center gap-2 py-4 px-6 rounded-xl transition-all hover:scale-[1.02] text-md disabled:scale-100 ${
-                    canRenew 
-                      ? 'bg-green-600 hover:bg-green-500 shadow-lg shadow-green-500/20 disabled:opacity-50' 
+                    canRenew
+                      ? 'bg-green-600 hover:bg-green-500 shadow-lg shadow-green-500/20 disabled:opacity-50'
                       : 'bg-[#333] text-gray-500 cursor-not-allowed border border-[#444]'
                   }`}
                 >
-                  {renewing ? "Processing..." : canRenew ? `Continue Policy (Pay ₹${activePolicy.policy_cost} ->)` : "Fully Covered for Next Week"}
+                  {renewing ? "Processing..." : canRenew ? `Continue Policy (Pay ₹${activePolicy.policy_cost} →)` : "Fully Covered for Next Week"}
                 </button>
               </div>
+
               {renewalFeedback && (
                 <div className={`p-4 rounded-xl text-center text-sm font-medium border animate-fade-in ${renewalFeedback.type === 'success' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-500 border-red-500/30'}`}>
                   {renewalFeedback.message}
@@ -275,32 +379,35 @@ const Dashboard = ({ user, onLogout, onGoToPolicy, triggerRazorpay }) => {
               <h3 className="text-sm text-gray-400 font-medium mb-3">Claim History</h3>
               
               <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                {allClaims.length === 0 ? (
+                {combinedHistory.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-32 text-gray-600">
                     <Clock className="w-8 h-8 mb-2 opacity-20" />
-                    <p className="text-sm italic">No past claims found</p>
+                    <p className="text-sm italic">No past activity found</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {allClaims.map((claim) => (
-                      <div key={claim.id} className="bg-[#1A1A1A] p-3 rounded-xl border border-white/5 flex justify-between items-center group hover:border-[#0066FF]/30 transition-colors">
+                    {combinedHistory.map((item, idx) => (
+                      <div key={item.id || idx} className="bg-[#1A1A1A] p-3 rounded-xl border border-white/5 flex justify-between items-center group hover:border-[#0066FF]/30 transition-colors">
                         <div className="flex flex-col">
                           <span className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${
-                            claim.status === 'approved' ? 'text-green-500' :
-                            claim.status === 'pending' ? 'text-yellow-500' : 'text-gray-500'
+                            item.type === 'bonus' ? 'text-[#0066FF]' :
+                            item.status === 'approved' ? 'text-green-500' :
+                            item.status === 'pending' ? 'text-yellow-500' : 'text-gray-500'
                           }`}>
-                            {claim.status}
+                            {item.type === 'bonus' ? 'Loyalty Bonus' : item.status}
                           </span>
                           <span className="text-xs text-gray-400">
-                            {new Date(claim.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            {new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                           </span>
                         </div>
                         <div className="text-right">
-                          <p className={`font-bold ${claim.status === 'approved' ? 'text-white' : 'text-gray-600'}`}>
-                            {claim.status === 'approved' ? `₹${claim.final_payout}` : '—'}
+                          <p className={`font-bold ${item.type === 'bonus' || item.status === 'approved' ? 'text-white' : 'text-gray-600'}`}>
+                            {item.type === 'bonus' ? `₹${item.return_amount}` : 
+                             item.status === 'approved' ? `₹${item.final_payout}` : '—'}
                           </p>
                           <p className="text-[10px] text-gray-500">
-                            {claim.status === 'approved' ? 'Payout' : 'Evaluated'}
+                            {item.type === 'bonus' ? 'Returned' : 
+                             item.status === 'approved' ? 'Payout' : 'Evaluated'}
                           </p>
                         </div>
                       </div>

@@ -463,7 +463,7 @@ floor                = 0.5 × 600     = ₹300
 
 ## Loyalty Bonus — Chit Fund Model
 
-Workers who pay continuously for **24 weeks (6 months)** never truly "lose" their premiums.
+Workers who pay continuously for **12 weeks (3 months)** never truly "lose" their premiums.
 
 | Scenario | Premium Return |
 |---|---|
@@ -474,7 +474,7 @@ Workers who pay continuously for **24 weeks (6 months)** never truly "lose" thei
 - Missed weekly payment → counter resets to zero
 - Any payout received during the term → counter resets to zero
 
-Only an unbroken 24-week streak qualifies. A 48-hour grace period applies after the policy term ends (for settlement processing only — not for coverage extension).
+Only an unbroken 12-week streak qualifies. A 48-hour grace period applies after the policy term ends (for settlement processing only — not for coverage extension).
 
 Settlement is triggered automatically and paid via UPI.
 
@@ -510,7 +510,7 @@ Premiums collected from active workers are pooled at the zone level to fund auto
 | **Diversification** | Risk spread across workers in different wards within each city zone |
 | **Reserve Buffer** | 15% of each premium retained as a contingency reserve (the 1.15 loading factor in the formula) |
 | **Reinsurance** | Reinsurance layer planned at scale to protect against catastrophic multi-city events (e.g., national floods) |
-| **Return Flow** | Undrawn reserves after 24-week chit cycle returned to eligible workers as Loyalty Bonus |
+| **Return Flow** | Undrawn reserves after 12-week chit cycle returned to eligible workers as Loyalty Bonus |
 
 ---
 
@@ -694,7 +694,7 @@ The policy covers:
 - Fraud and misrepresentation exclusions
 - 4-Gate claim validation process
 - Benefit calculation formulas
-- Chit Fund Loyalty Bonus terms
+- Chit Fund Loyalty Bonus terms (12-week cycle)
 - Policyholder obligations
 - Data privacy (DPDP Act 2023)
 - Dispute resolution and grievance mechanism
@@ -725,10 +725,10 @@ Built on **Supabase (Postgres + Auth + Realtime)**.
 | `weekly_premium` | numeric | Sigmoid-scaled, ≤ ₹100 |
 | `status` | text | active / expired / cancelled |
 | `plan_duration_months` | int | 3 or 6 |
-| `subscribed_at` | timestamptz | |
+| `coverage_start_at` | timestamptz | |
 | `next_due_date` | timestamptz | |
 
-### `ward_affinity`
+### `worker_ward_affinity`
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid (PK) | |
@@ -751,7 +751,7 @@ Built on **Supabase (Postgres + Auth + Realtime)**.
 | `is_announced` | boolean | |
 | `is_spontaneous` | boolean | |
 
-### `peer_activity_snapshots`
+### `peer_activity`
 | Column | Type | Notes |
 |---|---|---|
 | `event_id` | uuid (FK) | |

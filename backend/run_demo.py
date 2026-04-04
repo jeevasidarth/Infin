@@ -32,27 +32,33 @@ async def run_demo():
     worker_email = worker.get('email', 'Unknown Email')
     print(f"\n[Setup] Selected Worker: {worker_email} ({worker_id})")
     
-    # Ensure they have an active policy
+    # Ensure they have an active policy that started WELL BEFORE any disruption
+    now = datetime.now(timezone.utc)
+    backdated_start = (now - timedelta(days=7)).isoformat()
+    
     policy_res = client.table('policies').select('id, status').eq('worker_id', worker_id).execute()
     if policy_res.data:
         policy = policy_res.data[0]
-        if policy['status'] != 'active':
-             client.table('policies').update({'status': 'active'}).eq('id', policy['id']).execute()
-             print(f"[Setup] Updated policy {policy['id']} to 'active'.")
+        client.table('policies').update({
+            'status': 'active',
+            'coverage_start_at': backdated_start,
+            'cumulative_weeks_count': 3, # Mock some progress
+            'cumulative_amount_collected': 150.0
+        }).eq('id', policy['id']).execute()
+        print(f"[Setup] Backdated existing policy {policy['id']} to 7 days ago to ensure Gate 3 (AEC) passes.")
     else:
         # Create a proxy active policy if they don't have one
-        now = datetime.now(timezone.utc)
         pol = {
             'worker_id': worker_id,
             'status': 'active',
-            'coverage_start_at': (now - timedelta(days=5)).isoformat(),
+            'coverage_start_at': backdated_start,
             'expected_daily_earnings': 1000,
             'policy_cost': 50,
-            'cumulative_weeks_count': 1,
-            'cumulative_amount_collected': 50
+            'cumulative_weeks_count': 3,
+            'cumulative_amount_collected': 150.0
         }
         res = client.table('policies').insert(pol).execute()
-        print(f"[Setup] Created mock policy {res.data[0]['id']} with status 'active'.")
+        print(f"[Setup] Created mock policy {res.data[0]['id']} with backdated start.")
         
     policy = client.table('policies').select('id').eq('worker_id', worker_id).execute().data[0]
     
@@ -79,14 +85,21 @@ async def run_demo():
         
     print(f"[Setup] Targeting ward ID: {ward_id} for disruption.")
     
-    # 3. Create an ACTIVE disruption right now
+    # 2. Pick all wards the worker has affinity with to manage disruptions cleanly
+    affinity_res = client.table('worker_ward_affinity').select('ward_id').eq('worker_id', worker_id).execute()
+    ward_ids = [a['ward_id'] for a in affinity_res.data] if affinity_res.data else [ward_id]
+    
+    print(f"[Setup] Clearing existing active disruptions for worker wards: {ward_ids}")
+    client.table('zone_disruption_events').update({'is_active': False}).in_('ward_id', ward_ids).execute()
+
+    # 3. Create an ACTIVE disruption right now for the primary ward
     now = datetime.now(timezone.utc)
     disruption_start = now - timedelta(hours=4) # Started 4 hours ago
     
     client.table('zone_disruption_events').insert({
-        'ward_id': ward_id,
+        'ward_id': ward_ids[0],
         'is_active': True,
-        'rain': 80.0,
+        'rain': 85.0,
         'flood': 0.0,
         'aqi': 50.0,
         'heat': 80.0,
@@ -98,32 +111,44 @@ async def run_demo():
     # Ensure Gate 2 passes (less than 50% working)
     today = now.date().isoformat()
     client.table('peer_activity').upsert({
-        'ward_id': ward_id,
+        'ward_id': ward_ids[0],
         'date': today,
         'percent_working': 0.15 # Severe rain, only 15% working
     }).execute()
-    print(f"[Setup] Injected Active disruption event (Rain > 80mm) starting at {disruption_start.isoformat()}")
+    print(f"[Setup] Injected Active disruption event (Rain > 80mm) in {ward_ids[0]} starting at {disruption_start.isoformat()}")
     print("-" * 60)
     
     # --- STEP A: Trigger Phase 1 Evaluator ---
     print("\n[EVALUATION TICK 1] Disruption is ONGOING")
     await evaluate_claims(now.isoformat())
     
-    claim_check = client.table('claims').select('status').eq('policy_id', policy['id']).execute()
-    claim_status = claim_check.data[0]['status'] if claim_check.data else 'Not Found'
-    print(f"\n-> Evaluation Tick 1 Complete. Claim created, Current Status: {claim_status}")
+    claim_check = client.table('claims').select('id, status, disruption_event_ids').eq('policy_id', policy['id']).execute()
+    if not claim_check.data:
+        print("-> Evaluation Tick 1 Failed: No claim was created.")
+        return
+        
+    claim = claim_check.data[0]
+    claim_status = claim['status']
+    print(f"\n-> Evaluation Tick 1 Complete. Claim {claim['id']} Status: {claim_status}")
     print("-" * 60)
     
-    # --- STEP B: Turn off disruption ---
-    client.table('zone_disruption_events').update({'is_active': False}).eq('ward_id', ward_id).execute()
-    print("\n[Setup] Disruption explicitly marked as RESOLVED (is_active = False)")
+    # --- STEP B: Resolve ALL wards tied to this claim ---
+    # To pass Phase 2's 'all_resolved' check, every ward in the claim must have is_active=False
+    event_ids = claim.get('disruption_event_ids', [])
+    if event_ids:
+        client.table('zone_disruption_events').update({'is_active': False}).in_('id', event_ids).execute()
+        print(f"\n[Setup] Resolved {len(event_ids)} disruption events tied to the claim.")
+    else:
+        # Fallback to resolving the affinity wards
+        client.table('zone_disruption_events').update({'is_active': False}).in_('ward_id', ward_ids).execute()
+        print(f"\n[Setup] Resolved all affinity wards.")
+        
     print("-" * 60)
     
     # --- STEP C: Trigger Phase 2 Evaluator ---
     print("\n[EVALUATION TICK 2] Post-Disruption Resolution")
-    # Tell the system we are 4 hours later exactly 
-    simulated_now = now.isoformat()
-    await evaluate_claims(simulated_now)
+    # Simulate being 1 minute later
+    await evaluate_claims((now + timedelta(minutes=1)).isoformat())
     
     claim_check = client.table('claims').select('*').eq('policy_id', policy['id']).execute()
     if claim_check.data:
