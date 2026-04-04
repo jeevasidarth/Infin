@@ -3,11 +3,6 @@
 > **Parametric income insurance for Swiggy & Zomato delivery partners.**
 > Automated payouts. Zero paperwork. No manual claims.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Built with Next.js](https://img.shields.io/badge/Built%20with-Next.js-black)](https://nextjs.org/)
-[![Powered by Supabase](https://img.shields.io/badge/Powered%20by-Supabase-3ECF8E)](https://supabase.com/)
-[![IRDAI Aligned](https://img.shields.io/badge/Designed%20in%20alignment%20with-IRDAI%20Sandbox-orange)](https://www.irdai.gov.in/)
-
 ---
 
 ## Table of Contents
