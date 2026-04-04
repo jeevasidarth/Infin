@@ -3,7 +3,7 @@ import { Shield, ChevronRight, X, ExternalLink, ShieldCheck, Clock, AlertCircle,
 import { supabase } from '../supabase';
 import { API_BASE_URL } from '../config';
 
-const Dashboard = ({ user, onLogout, onGoToPolicy }) => {
+const Dashboard = ({ user, onLogout, onGoToPolicy, triggerRazorpay }) => {
   const [showTerms, setShowTerms] = useState(false);
   const [showFullTerms, setShowFullTerms] = useState(false);
   const [accepted, setAccepted] = useState(false);
@@ -74,29 +74,36 @@ const Dashboard = ({ user, onLogout, onGoToPolicy }) => {
     if (!activePolicy) return;
     setRenewing(true);
     setRenewalFeedback(null);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/policy/renew`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ policy_id: activePolicy.id })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.detail || "Failed to renew policy");
-      
-      setActivePolicy({
-        ...activePolicy,
-        cumulative_weeks_count: data.cumulative_weeks_count,
-        cumulative_amount_collected: data.cumulative_amount_collected,
-        next_due_date: data.next_due_date
-      });
-      setRenewalFeedback({ type: 'success', message: 'Policy renewed successfully for another week!' });
-      setTimeout(() => setRenewalFeedback(null), 5000);
-    } catch (err) {
-      console.error(err);
-      setRenewalFeedback({ type: 'error', message: err.message });
-    } finally {
-      setRenewing(false);
-    }
+    
+    // RAZORPAY INTEGRATION
+    await triggerRazorpay(activePolicy.policy_cost, async (paymentResponse) => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/v1/policy/renew`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ policy_id: activePolicy.id })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.detail || "Failed to renew policy");
+          
+          setActivePolicy({
+            ...activePolicy,
+            cumulative_weeks_count: data.cumulative_weeks_count,
+            cumulative_amount_collected: data.cumulative_amount_collected,
+            next_due_date: data.next_due_date
+          });
+          setRenewalFeedback({ type: 'success', message: 'Policy renewed successfully for another week!' });
+          setTimeout(() => setRenewalFeedback(null), 5000);
+        } catch (err) {
+          console.error(err);
+          setRenewalFeedback({ type: 'error', message: err.message });
+        } finally {
+          setRenewing(false);
+        }
+    });
+
+    // Reset button state if modal is closed or after a delay
+    setTimeout(() => setRenewing(false), 2000);
   };
 
   const handleAccept = () => {
@@ -402,41 +409,6 @@ const Dashboard = ({ user, onLogout, onGoToPolicy }) => {
           </div>
         </div>
 
-        {/* Developer Testing Toggles (Not visible in prod) */}
-        <div className="mt-12 p-5 bg-[#1A1A1A] rounded-xl border border-dashed border-[#444] flex flex-wrap gap-4 items-center">
-          <span className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center">Developer Simulation Tools:</span>
-          <button 
-            onClick={() => setIsPolicyActive(!isPolicyActive)}
-            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors font-medium ${isPolicyActive ? 'border-green-500/50 text-green-500 bg-green-500/10' : 'border-[#444] text-gray-400 hover:text-white'}`}
-          >
-            {isPolicyActive ? 'Turn Off Active Policy' : 'Simulate Active Policy'}
-          </button>
-          
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setDisruptionStage(0)}
-              disabled={!isPolicyActive}
-              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors font-medium ${disruptionStage === 0 ? 'border-gray-500/50 text-gray-400 bg-gray-500/10' : 'border-[#444] text-gray-500 disabled:opacity-30'} hover:text-white disabled:hover:text-gray-400`}
-            >
-              No Disruption
-            </button>
-            <button 
-              onClick={() => setDisruptionStage(1)}
-              disabled={!isPolicyActive}
-              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors font-medium ${disruptionStage === 1 ? 'border-red-500/50 text-red-500 bg-red-500/10' : 'border-[#444] text-gray-500 disabled:opacity-30'} hover:text-white disabled:hover:text-gray-400`}
-            >
-              Trigger Disruption
-            </button>
-            <button 
-              onClick={() => setDisruptionStage(2)}
-              disabled={!isPolicyActive}
-              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors font-medium ${disruptionStage === 2 ? 'border-green-500/50 text-green-500 bg-green-500/10' : 'border-[#444] text-gray-500 disabled:opacity-30'} hover:text-white disabled:hover:text-gray-400`}
-            >
-              Finalise Claim
-            </button>
-          </div>
-        </div>
-
       </div>
 
       {/* Terms Modal */}
@@ -458,27 +430,6 @@ const Dashboard = ({ user, onLogout, onGoToPolicy }) => {
                 Before proceeding to calculate your personalized weekly premium, please review how InFin's parametric system works. Your policy strictly relies on automated data triggers from trusted meteorological and civic APIs.
               </p>
 
-              {/* Expandable full terms inside same popup */}
-              <div className="mb-6">
-                <button 
-                  onClick={() => setShowFullTerms(!showFullTerms)}
-                  className="text-[#0066FF] font-medium text-sm flex items-center gap-1 hover:underline outline-none"
-                >
-                  <ExternalLink className="w-4 h-4" /> 
-                  {showFullTerms ? 'Hide Full Legal Terms' : 'Read Full Terms & Conditions'}
-                </button>
-                
-                {showFullTerms && (
-                  <div className="mt-4 p-4 bg-[#1A1A1A] rounded-lg border border-[#333] text-xs text-gray-400 space-y-3 h-48 overflow-y-auto custom-scrollbar">
-                    <p><strong>1. Policy Activation:</strong> Coverage begins immediately upon successful payment of your weekly premium. The 6-hour refractory period applies for spontaneous disruption events (e.g. riots, unplanned barricading).</p>
-                    <p><strong>2. Payout Gates:</strong> Claim payouts are strictly evaluated using the 3-Gate Check (DVS, ZPCS, AEC). Traditional damage claims are not entertained. Valid disbursements happen automatically via UPI.</p>
-                    <p><strong>3. Anti-Gaming Clause:</strong> Policies bought *after* an official public disruption alert (e.g. IMD Orange/Red alert, strike announcement) are excluded from coverage for that specific event.</p>
-                    <p><strong>4. Dispute Resolution:</strong> All external API data snapshots used for gate validity are final. Manual audit requests are subject to internal operational capacities.</p>
-                    <p><strong>5. Loyalty Bonus:</strong> A minimum of 24 concurrent weekly payments without any claims grants a partial return of premiums. A single missed week resets your standing.</p>
-                  </div>
-                )}
-              </div>
-
               <label className="flex items-start gap-3 cursor-pointer group">
                 <div className="mt-1">
                   <input 
@@ -489,7 +440,7 @@ const Dashboard = ({ user, onLogout, onGoToPolicy }) => {
                   />
                 </div>
                 <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">
-                  I have read and agree to the parametric insurance guidelines, automatic gate evaluation process, and the 6-hour spontaneous event refractory rule.
+                  I have read and agree to the parametric insurance guidelines and automated evaluation process.
                 </span>
               </label>
             </div>

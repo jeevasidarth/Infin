@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 
 const IdentityForm = ({ data, updateData, onNext }) => {
-  const isValid = data.email && data.password && data.whatsapp && data.city && data.pinCode;
+  const isValid = data.email && data.password && data.whatsapp && data.city;
 
   return (
     <motion.div
@@ -76,19 +76,6 @@ const IdentityForm = ({ data, updateData, onNext }) => {
            </select>
         </div>
 
-        <div>
-           <label className="block text-xs text-gray-400 mb-1 ml-1 uppercase tracking-wide">
-             Pin Code *
-           </label>
-           <input
-             type="text"
-             placeholder="e.g. 600001"
-             maxLength={6}
-             className="w-full bg-[#1F1F1F] border border-[#444] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#0066FF] transition-colors"
-             value={data.pinCode}
-             onChange={e => updateData({ pinCode: e.target.value })}
-           />
-        </div>
 
         <div>
            <label className="block text-xs text-gray-400 mb-1 ml-1 uppercase tracking-wide">

@@ -3,6 +3,6 @@ uvicorn
 gunicorn
 pydantic
 python-dotenv
-pandas
-supabase
+supabase==2.7.0
 httpx
+razorpay

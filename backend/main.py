@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-import pandas as pd
+# import pandas as pd # Removed due to DLL load failures on Python 3.14
 from datetime import datetime
 from supabase import create_client, Client
 
@@ -71,18 +71,30 @@ async def get_policy_quote(user_id: str):
         
         expected_daily_earnings = 800 # fallback
         
-        if earnings_res.data and len(earnings_res.data) > 0:
-            # Calculate simple Exponential Moving Average using pandas
-            df = pd.DataFrame(earnings_res.data)
-            df['earnings'] = pd.to_numeric(df['earnings'])
+        if earnings_res.data:
+            # PURE PYTHON: Group by date and find max earnings per day
+            daily_max = {}
+            for row in earnings_res.data:
+                d = row.get('date')
+                try:
+                    val = float(row.get('earnings', 0))
+                except (ValueError, TypeError):
+                    val = 0
+                if d:
+                    if d not in daily_max or val > daily_max[d]:
+                        daily_max[d] = val
             
-            # Since earnings are cumulative per day, take the max earnings for each date
-            daily_df = df.groupby('date')['earnings'].max().reset_index()
-            daily_df = daily_df.sort_values('date') # Crucial: sort chronological for EMA
+            # Sort chronologically for EMA
+            sorted_dates = sorted(daily_max.keys())
+            daily_values = [daily_max[d] for d in sorted_dates]
             
-            ema = daily_df['earnings'].ewm(span=7, adjust=False).mean()
-            if not ema.empty:
-                expected_daily_earnings = float(ema.iloc[-1])
+            if daily_values:
+                # Simple EMA (span=7)
+                alpha = 2 / (7 + 1)
+                ema = daily_values[0]
+                for val in daily_values[1:]:
+                    ema = (val * alpha) + (ema * (1 - alpha))
+                expected_daily_earnings = ema
                 
         # 4. Engine 1 Formula Calculate Premium
         weekly_premium = round(expected_daily_earnings * disruption_probability * 0.70 * 1.15 / 0.65)
@@ -169,6 +181,22 @@ async def subscribe_policy(req: SubscribeRequest):
         print(f"[Engine 1] Error creating policy: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+from razorpay_provider import create_razorpay_order
+
+class OrderRequest(BaseModel):
+    amount: float
+    currency: str = "INR"
+
+@app.post("/create-order")
+async def create_order(req: OrderRequest):
+    try:
+        # Amount in INR; razorpay_provider handles paise conversion
+        order = create_razorpay_order(amount_inr=req.amount, currency=req.currency)
+        return {"order_id": order["id"], "amount": order["amount"], "currency": order["currency"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 from engine2 import router as engine2_router
 app.include_router(engine2_router)
