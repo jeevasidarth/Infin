@@ -6,7 +6,12 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 # import pandas as pd # Removed due to DLL load failures on Python 3.14
 from datetime import datetime
+import asyncio
 from supabase import create_client, Client
+from weather_service import WeatherService
+from weather_config import THRESHOLDS, DVS_PASS_THRESHOLD
+from aqi_service import AQIService
+from news_service import NewsService
 
 load_dotenv()
 
@@ -22,6 +27,12 @@ async def lifespan(app: FastAPI):
         raise Exception("Missing SUPABASE_URL or SUPABASE_KEY in .env")
     supabase = create_client(url, key)
     print("Startup: Initialized Supabase client successfully")
+    
+    # Start weather, AQI & News background tasks
+    asyncio.create_task(weather_background_loop())
+    asyncio.create_task(aqi_background_loop())
+    asyncio.create_task(news_background_loop())
+    
     yield
     print("Shutdown: Cleaning up resources")
 
@@ -518,3 +529,228 @@ async def reset_policy_on_claim(req: ClaimResetRequest):
     except Exception as e:
         print(f"[ClaimReset] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────
+# WEATHER INTELLIGENCE SYSTEM
+# ─────────────────────────────────────────────────────────────
+
+async def weather_background_loop():
+    """Refreshes weather every 60 minutes and triggers disruptions if needed."""
+    service = WeatherService(supabase)
+    while True:
+        try:
+            print("[WeatherSync] Starting hourly weather refresh...")
+            for city in ["Chennai", "Bangalore", "Hyderabad", "Mumbai", "Delhi"]:
+                weather = await service.fetch_city_weather(city)
+                if weather:
+                    await evaluate_weather_for_disruption(weather)
+            
+            print("[WeatherSync] Refresh complete. Sleeping for 1 hour.")
+        except Exception as e:
+            print(f"[WeatherSync] Loop error: {e}")
+        
+        await asyncio.sleep(3600) # 1 hour
+
+async def evaluate_weather_for_disruption(weather: dict):
+    """Automatically triggers zone_disruption_events if Gate 1 DVS score >= 0.70."""
+    city = weather['city']
+    dvs_score = weather.get('dvs_score', 0.0)
+    rain_mm = weather.get('rain_mm', 0.0)
+    
+    is_disrupted = dvs_score >= DVS_PASS_THRESHOLD
+    disruption_type = "Severe Weather (Gate 1 Passed)"
+        
+    if is_disrupted:
+        print(f"[WeatherAlert] Gate 1 Passed for {city} | DVS={dvs_score:.2f}. Triggering ward disruptions...")
+        
+        # 1. Fetch all wards in this city
+        wards_res = supabase.table("wards").select("id").ilike("city", f"%{city}%").execute()
+        ward_ids = [w['id'] for w in wards_res.data] if wards_res.data else []
+        
+        if ward_ids:
+            from datetime import timezone
+            now_iso = datetime.now(timezone.utc).isoformat()
+            
+            # 2. Insert disruption events for all wards
+            events = []
+            for w_id in ward_ids:
+                # Check if an active one already exists to avoid spamming
+                existing = supabase.table("zone_disruption_events").select("id").eq("ward_id", w_id).eq("is_active", True).execute()
+                if not existing.data:
+                    events.append({
+                        "ward_id": w_id,
+                        "is_active": True,
+                        "rain": float(rain_mm),
+                        "flood": 0.0,
+                        "aqi": 50.0,
+                        "heat": float(weather.get('temperature_c', 0)),
+                        "lockdown": False,
+                        "strike": False,
+                        "created_at": now_iso
+                    })
+            
+            if events:
+                supabase.table("zone_disruption_events").insert(events).execute()
+                print(f"[WeatherAlert] Created {len(events)} disruption events for {city}")
+
+@app.get("/api/weather/{city}")
+async def get_city_weather(city: str):
+    """Fetch cached weather data for a city."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database connection error")
+        
+    res = supabase.table("weather_snapshots").select("*").ilike("city", f"%{city}%").limit(1).execute()
+    if not res.data:
+        # Try a fresh fetch if not in cache
+        service = WeatherService(supabase)
+        data = await service.fetch_city_weather(city)
+        if not data:
+            raise HTTPException(status_code=404, detail=f"Weather data for {city} not found")
+        return data
+        
+    return res.data[0]
+
+
+# ─────────────────────────────────────────────────────────────
+# AQI INTELLIGENCE SYSTEM
+# ─────────────────────────────────────────────────────────────
+
+async def aqi_background_loop():
+    """Refreshes AQI data every 60 minutes and triggers disruptions if needed."""
+    service = AQIService(supabase)
+    while True:
+        try:
+            print("[AQISync] Starting hourly AQI refresh...")
+            for city in ["Chennai", "Bangalore", "Hyderabad", "Mumbai", "Delhi"]:
+                aqi_data = await service.fetch_city_aqi(city)
+                if aqi_data:
+                    await evaluate_aqi_for_disruption(aqi_data)
+            print("[AQISync] Refresh complete. Sleeping for 1 hour.")
+        except Exception as e:
+            print(f"[AQISync] Loop error: {e}")
+
+        await asyncio.sleep(3600)  # 1 hour
+
+async def evaluate_aqi_for_disruption(aqi_data: dict):
+    """Triggers zone_disruption_events if Gate 1 AQI DVS score >= 0.70."""
+    city = aqi_data["city"]
+    dvs_score = aqi_data.get("dvs_score", 0.0)
+    aqi_value = aqi_data.get("aqi", 0.0)
+
+    if dvs_score >= DVS_PASS_THRESHOLD:
+        print(f"[AQIAlert] Gate 1 Passed for {city} | AQI={aqi_value}, DVS={dvs_score:.2f}. Triggering ward disruptions...")
+
+        wards_res = supabase.table("wards").select("id").ilike("city", f"%{city}%").execute()
+        ward_ids = [w["id"] for w in wards_res.data] if wards_res.data else []
+
+        if ward_ids:
+            from datetime import timezone as tz
+            now_iso = datetime.now(tz.utc).isoformat()
+            events = []
+            for w_id in ward_ids:
+                existing = supabase.table("zone_disruption_events").select("id").eq("ward_id", w_id).eq("is_active", True).execute()
+                if not existing.data:
+                    events.append({
+                        "ward_id": w_id,
+                        "is_active": True,
+                        "rain": 0.0,
+                        "flood": 0.0,
+                        "aqi": float(aqi_value),
+                        "heat": 0.0,
+                        "lockdown": False,
+                        "strike": False,
+                        "created_at": now_iso
+                    })
+            if events:
+                supabase.table("zone_disruption_events").insert(events).execute()
+                print(f"[AQIAlert] Created {len(events)} AQI disruption events for {city}")
+
+@app.get("/api/aqi/{city}")
+async def get_city_aqi(city: str):
+    """Fetch cached AQI data for a city."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database connection error")
+
+    res = supabase.table("aqi_snapshots").select("*").ilike("city", f"%{city}%").limit(1).execute()
+    if not res.data:
+        # Try a fresh fetch if not in cache
+        service = AQIService(supabase)
+        data = await service.fetch_city_aqi(city)
+        if not data:
+            raise HTTPException(status_code=404, detail=f"AQI data for '{city}' not found. Ensure the city is supported and the aqi_snapshots table exists in Supabase.")
+        return data
+
+    return res.data[0]
+
+
+# ─────────────────────────────────────────────────────────────
+# NEWS DISRUPTION SYSTEM
+# ─────────────────────────────────────────────────────────────
+
+async def news_background_loop():
+    """Refreshes disruption news every 60 minutes and triggers disruptions if needed."""
+    service = NewsService(supabase)
+    while True:
+        try:
+            print("[NewsSync] Starting hourly news refresh...")
+            for city in ["Chennai", "Bangalore", "Hyderabad", "Mumbai", "Delhi"]:
+                news_data = await service.fetch_city_news(city)
+                if news_data:
+                    await evaluate_news_for_disruption(news_data)
+            print("[NewsSync] Refresh complete. Sleeping for 1 hour.")
+        except Exception as e:
+            print(f"[NewsSync] Loop error: {e}")
+
+        await asyncio.sleep(3600)  # 1 hour
+
+async def evaluate_news_for_disruption(news_data: dict):
+    """Triggers zone_disruption_events if Gate 1 News DVS score >= 0.70."""
+    city = news_data["city"]
+    dvs_score = news_data.get("dvs_score", 0.0)
+    headline = news_data.get("headline", "")
+
+    if dvs_score >= DVS_PASS_THRESHOLD:
+        print(f"[NewsAlert] Gate 1 Passed for {city} | DVS={dvs_score:.2f} | Event: {headline}. Triggering ward disruptions...")
+
+        wards_res = supabase.table("wards").select("id").ilike("city", f"%{city}%").execute()
+        ward_ids = [w["id"] for w in wards_res.data] if wards_res.data else []
+
+        if ward_ids:
+            from datetime import timezone as tz
+            now_iso = datetime.now(tz.utc).isoformat()
+            events = []
+            for w_id in ward_ids:
+                existing = supabase.table("zone_disruption_events").select("id").eq("ward_id", w_id).eq("is_active", True).execute()
+                if not existing.data:
+                    events.append({
+                        "ward_id": w_id,
+                        "is_active": True,
+                        "rain": 0.0,
+                        "flood": 0.0,
+                        "aqi": 0.0,
+                        "heat": 0.0,
+                        "lockdown": True if "bandh" in headline.lower() or "lockdown" in headline.lower() else False,
+                        "strike": True,
+                        "created_at": now_iso
+                    })
+            if events:
+                supabase.table("zone_disruption_events").insert(events).execute()
+                print(f"[NewsAlert] Created {len(events)} news-based disruption events for {city}")
+
+@app.get("/api/news/{city}")
+async def get_city_news(city: str):
+    """Fetch cached news data for a city."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database connection error")
+
+    res = supabase.table("disruption_news").select("*").ilike("city", f"%{city}%").limit(1).execute()
+    if not res.data:
+        # Try a fresh fetch if not in cache
+        service = NewsService(supabase)
+        data = await service.fetch_city_news(city)
+        if not data:
+            return {"city": city, "headline": None, "message": "No recent disruptions detected"}
+        return data
+
+    return res.data[0]
