@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, ChevronRight, X, ExternalLink, ShieldCheck, Clock, AlertCircle, CloudLightning, Radio, CheckCircle, MapPin, Mail, Phone } from 'lucide-react';
+import { Shield, ChevronRight, X, ExternalLink, ShieldCheck, Clock, AlertCircle, CloudLightning, Radio, CheckCircle, MapPin, Mail, Phone, Wind, Newspaper } from 'lucide-react';
 import { supabase } from '../supabase';
 import { API_BASE_URL } from '../config';
 
@@ -17,6 +17,12 @@ const Dashboard = ({ user, onLogout, onGoToPolicy, triggerRazorpay }) => {
   const [renewalFeedback, setRenewalFeedback] = useState(null);
   const [disruptionStage, setDisruptionStage] = useState(0); 
   const [newPayoutAlert, setNewPayoutAlert] = useState(null); // { id, type, amount }
+  const [weather, setWeather] = useState(null);
+  const [loadingWeather, setLoadingWeather] = useState(true);
+  const [aqi, setAqi] = useState(null);
+  const [loadingAqi, setLoadingAqi] = useState(true);
+  const [news, setNews] = useState(null);
+  const [loadingNews, setLoadingNews] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -86,6 +92,60 @@ const Dashboard = ({ user, onLogout, onGoToPolicy, triggerRazorpay }) => {
       }
     };
     fetchData();
+  }, [user]);
+
+  useEffect(() => {
+    const fetchWeather = async () => {
+      if (!user?.city) return;
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/weather/${user.city}`);
+        if (res.ok) {
+          const data = await res.json();
+          setWeather(data);
+        }
+      } catch (err) {
+        console.error("Error fetching weather:", err);
+      } finally {
+        setLoadingWeather(false);
+      }
+    };
+    fetchWeather();
+  }, [user]);
+
+  useEffect(() => {
+    const fetchAqi = async () => {
+      if (!user?.city) return;
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/aqi/${user.city}`);
+        if (res.ok) {
+          const data = await res.json();
+          setAqi(data);
+        }
+      } catch (err) {
+        console.error('Error fetching AQI:', err);
+      } finally {
+        setLoadingAqi(false);
+      }
+    };
+    fetchAqi();
+  }, [user]);
+
+  useEffect(() => {
+    const fetchNews = async () => {
+      if (!user?.city) return;
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/news/${user.city}`);
+        if (res.ok) {
+          const data = await res.json();
+          setNews(data);
+        }
+      } catch (err) {
+        console.error('Error fetching News:', err);
+      } finally {
+        setLoadingNews(false);
+      }
+    };
+    fetchNews();
   }, [user]);
 
   const dismissPayoutAlert = () => {
@@ -321,8 +381,175 @@ const Dashboard = ({ user, onLogout, onGoToPolicy, triggerRazorpay }) => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           
+          {/* Weather Card */}
+          <div className="bg-[#2B2B2B] p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col justify-between relative overflow-hidden group">
+             <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                <CloudLightning className="w-16 h-16 text-[#0066FF]" />
+             </div>
+             
+             <div>
+                <div className="flex justify-between items-start mb-4">
+                   <h3 className="text-sm text-gray-400 font-medium flex items-center gap-2">
+                     <MapPin className="w-4 h-4 text-[#0066FF]" /> {weather?.city || user?.city || 'Local Weather'}
+                   </h3>
+                   {weather && (
+                     <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${weather.trust_score > 0.8 ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                        <CheckCircle className="w-3 h-3" /> {weather.trust_score > 0.8 ? 'Verified' : 'Trusted'}
+                     </div>
+                   )}
+                </div>
+
+                <div className="flex items-end gap-3 mb-6">
+                   <p className="text-4xl font-black text-white">{weather ? `${Math.round(weather.temperature_c)}°` : '--°'}</p>
+                   <div className="flex flex-col">
+                      <p className="text-white font-bold text-sm leading-tight">{weather?.condition || 'Loading...'}</p>
+                      <p className="text-gray-500 text-[10px] uppercase tracking-wider">Condition</p>
+                   </div>
+                </div>
+             </div>
+
+             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Precipitation</p>
+                  <p className="text-sm font-bold text-white">{weather ? `${weather.rain_cm_display} cm` : '--'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Humidity</p>
+                  <p className="text-sm font-bold text-white">{weather ? `${weather.humidity}%` : '--'}</p>
+                </div>
+             </div>
+             
+             {weather && (
+               <p className="text-[9px] text-gray-600 mt-4 flex items-center gap-1">
+                 <Clock className="w-3 h-3" /> Updated {new Date(weather.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+               </p>
+             )}
+          </div>
+
+          {/* AQI Card */}
+          {(() => {
+            const aqiColors = {
+              'Good': { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
+              'Moderate': { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20' },
+              'Unhealthy for Sensitive Groups': { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20' },
+              'Unhealthy': { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20' },
+              'Very Unhealthy': { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
+              'Hazardous': { bg: 'bg-rose-900/30', text: 'text-rose-300', border: 'border-rose-500/30' },
+            };
+            const colors = aqiColors[aqi?.risk_level] || aqiColors['Good'];
+            return (
+              <div className="bg-[#2B2B2B] p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col justify-between relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <Wind className="w-16 h-16 text-emerald-500" />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-start mb-4">
+                    <h3 className="text-sm text-gray-400 font-medium flex items-center gap-2">
+                      <Wind className="w-4 h-4 text-emerald-500" /> Air Quality
+                    </h3>
+                    {aqi && (
+                      <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${aqi.trust_score > 0.8 ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                        <CheckCircle className="w-3 h-3" /> {aqi.trust_score > 0.8 ? 'Verified' : 'Trusted'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-end gap-3 mb-4">
+                    <p className={`text-4xl font-black ${aqi ? colors.text : 'text-white'}`}>{aqi ? Math.round(aqi.aqi) : '--'}</p>
+                    <div className="flex flex-col">
+                      <p className={`font-bold text-sm leading-tight ${aqi ? colors.text : 'text-white'}`}>{aqi?.risk_level || 'Loading...'}</p>
+                      <p className="text-gray-500 text-[10px] uppercase tracking-wider">AQI</p>
+                    </div>
+                  </div>
+
+                  {aqi && (
+                    <div className={`text-[10px] px-2 py-1.5 rounded-lg ${colors.bg} ${colors.text} ${colors.border} border mb-4 leading-relaxed`}>
+                      {aqi.health_advisory}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">PM2.5</p>
+                    <p className="text-sm font-bold text-white">{aqi ? `${aqi.pm2_5.toFixed(1)} µg/m³` : '--'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">PM10</p>
+                    <p className="text-sm font-bold text-white">{aqi ? `${aqi.pm10.toFixed(1)} µg/m³` : '--'}</p>
+                  </div>
+                </div>
+
+                {aqi && (
+                  <p className="text-[9px] text-gray-600 mt-4 flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Updated {new Date(aqi.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* News Disruption Card */}
+          {(() => {
+            const severityColors = {
+              'High': { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20', icon: 'text-rose-500' },
+              'Medium': { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20', icon: 'text-orange-500' },
+              'Low': { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', icon: 'text-blue-500' },
+            };
+            const colors = severityColors[news?.severity] || severityColors['Low'];
+            
+            return (
+              <div className="bg-[#2B2B2B] p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col justify-between relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <Newspaper className={`w-16 h-16 ${colors.icon}`} />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-start mb-4">
+                    <h3 className="text-sm text-gray-400 font-medium flex items-center gap-2">
+                       <Radio className={`w-4 h-4 ${colors.icon} ${news ? 'animate-pulse' : ''}`} /> Disruption News
+                    </h3>
+                    {news && (
+                      <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${news.trust_score > 0.8 ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                        <CheckCircle className="w-3 h-3" /> {news.trust_score > 0.8 ? 'Verified' : 'Trusted'}
+                      </div>
+                    )}
+                  </div>
+
+                  {!news ? (
+                    <div className="flex flex-col items-center justify-center h-32 text-gray-600 text-center">
+                      <ShieldCheck className="w-8 h-8 mb-2 opacity-10" />
+                      <p className="text-xs italic">No disruptions detected in last 24h</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mb-4">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${colors.bg} ${colors.text} border ${colors.border} uppercase tracking-tighter`}>
+                          {news.severity} Impact
+                        </span>
+                        <h4 className="text-white font-bold text-sm mt-2 line-clamp-2 leading-snug">{news.headline}</h4>
+                      </div>
+
+                      <div className="bg-[#1A1A1A] p-3 rounded-xl border border-white/5 mb-4">
+                        <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Affected Services</p>
+                        <p className="text-xs text-white line-clamp-1">{news.affected_services}</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {news && (
+                  <p className="text-[9px] text-gray-600 mt-auto flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Reported {new Date(news.published_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Insurance Status Card with Weekly Reset */}
           <div className="bg-[#2B2B2B] p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col justify-between relative overflow-hidden">
             {isPolicyActive && (
