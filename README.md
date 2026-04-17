@@ -72,8 +72,8 @@ Since gig platform APIs are not publicly accessible, workers can now upload thei
 
 ## Pitch Deck
 
-📊 **[Pitch Deck InFin](https://drive.google.com/file/d/1fJ0UqVgZmNLUnud5WSNEyr9X4IaTbd_T/view?usp=drive_link)**
-📊 **[Deployment](https://infin-tau.vercel.app/)**
+-📊 **[Pitch Deck InFin](https://drive.google.com/file/d/1fJ0UqVgZmNLUnud5WSNEyr9X4IaTbd_T/view?usp=drive_link)**
+-📊 **[Deployment](https://infin-tau.vercel.app/)**
 
 
 ---
